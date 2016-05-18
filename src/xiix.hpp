@@ -19,7 +19,13 @@ public:
 		auto p=argv;
 		for(int i=0;i<argc;i++)
 			puts(*p++);
-		main(argc,argv);
+		try{
+			main(argc,argv);
+		}catch(const char*msg){
+			puts(msg);
+		}catch(...){
+			puts("exception caught");
+		}
 	}
 
 	int	main(int argc,char**argv ){
@@ -30,7 +36,7 @@ public:
 		const char*host=argv[1];
 		const int port=atoi(argv[2]);
 		const char*requestURI=argv[3];
-		const int maxClients=1;
+		const int maxClients=atoi(argv[4]);
 
 		const int epfd=epoll_create(maxClients);
 		if(epfd<0){
@@ -86,7 +92,7 @@ public:
 //					ev.data.fd=newSock;
 //					if(epoll_ctl(epfd,EPOLL_CTL_ADD,newSock,&ev)<0)throw"epoll_ctl";
 				}
-				printf(" writes: %zu    reads: %zu \n",writes,reads);
+				printf(" writes: %zu    reads: %zu \r",writes,reads);
 			}
 		}
 		return 0;
