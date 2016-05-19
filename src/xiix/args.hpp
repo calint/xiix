@@ -1,19 +1,17 @@
 #pragma once
 #include<ctype.h>
-namespace xiix{
-class args{
+namespace xiix{class args final{
 	const int argc;
 	const char**argv;
 public:
 	#define loop()while(true)
-	args(const int argc,const char*argv[]):argc{argc},argv{argv}{}
+	inline args(const int argc,const char*argv[]):argc{argc},argv{argv}{}
 	inline bool hasoption(const char short_name){
 		if(argc==1)return false;
 		auto vv=argv;
 		auto i=argc;
 		loop(){
-			i--;
-			if(i==0)return false;
+			if(i==1)return false;
 			vv++;
 			i--;
 			auto p=*vv;
@@ -58,6 +56,4 @@ public:
 		}
 		return default_value;
 	}
-};
-
-}
+};}

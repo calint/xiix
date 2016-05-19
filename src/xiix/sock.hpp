@@ -1,19 +1,12 @@
 #pragma once
 #include"meters.hpp"
-//#include<sys/socket.h>
 #include<string.h>
-//#include<stdio.h>
-//#include<stdlib.h>
-//#include<string.h>
-//#include<netinet/in.h>
 #include<netdb.h>
 #include<fcntl.h>
 #include<sys/epoll.h>
 #include<errno.h>
-//#include<memory>
 #include<unistd.h>
-namespace xiix{
-class sock final{
+namespace xiix{class sock final{
 	int epollfd{0};
 	int sockfd{0};
 	const char*hostname{nullptr};
@@ -50,30 +43,22 @@ public:
 	}
 	inline void on_epoll_event(struct epoll_event&ev){
 		if(ev.events&EPOLLOUT){
+			meters::writes++;
 			char buf[1024];
-			const size_t len=snprintf(buf,sizeof buf,"GET %s HTTP/1.1\r\nHost: %s:%d\r\n\r\n",uri,hostname,port);
+			const size_t len=port!=80?
+				snprintf(buf,sizeof buf,"GET %s HTTP/1.1\r\nHost: %s:%d\r\n\r\n",uri,hostname,port):
+				snprintf(buf,sizeof buf,"GET %s HTTP/1.1\r\nHost: %s\r\n\r\n",uri,hostname);
 			io_send(buf,len,true);
 			io_request_read();
 			return;
 		}
 		if(ev.events&EPOLLIN){
+			meters::reads++;
 			char buf[1024];
 			io_recv(buf,sizeof buf);
 			io_request_write();
 			meters::requests++;
 			return;
-//			printf("read_len=%d\n",read_len);
-//			struct epoll_event ev;
-//			epoll_ctl(epfd,EPOLL_CTL_DEL,client,&ev);
-//			close(client);
-//
-//			int newSock=getSocket(host,port);
-//			setNonblocking(newSock);
-//
-//			memset(&ev,0,sizeof ev);
-//			ev.events= EPOLLIN|EPOLLOUT|EPOLLET;
-//			ev.data.fd=newSock;
-//			if(epoll_ctl(epfd,EPOLL_CTL_ADD,newSock,&ev)<0)throw"epoll_ctl";
 		}
 	}
 private:
@@ -115,5 +100,4 @@ private:
 		ev.events=EPOLLOUT|EPOLLET;
 		if(epoll_ctl(epollfd,EPOLL_CTL_MOD,sockfd,&ev))throw"epollmodwrite";
 	}
-};
-}
+};}
