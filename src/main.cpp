@@ -1,6 +1,5 @@
-#include<stdio.h>
-#include"xiix.hpp"
-int main(int argc,char**argv,char**env){
+#include"client.hpp"
+int main(const int argc,const char**argv,const char**env){
 	xiix::client(argc,argv,env);
 	return 0;
 }

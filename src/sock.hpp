@@ -1,29 +1,18 @@
 #pragma once
-#include<stdio.h>
-#include<stdlib.h>
+#include"meters.hpp"
+//#include<sys/socket.h>
 #include<string.h>
-#include<unistd.h>
-#include<sys/socket.h>
-#include<netinet/in.h>
+//#include<stdio.h>
+//#include<stdlib.h>
+//#include<string.h>
+//#include<netinet/in.h>
 #include<netdb.h>
 #include<fcntl.h>
 #include<sys/epoll.h>
 #include<errno.h>
-#include<memory>
+//#include<memory>
+#include<unistd.h>
 namespace xiix{
-
-namespace meters{
-	size_t events{0};
-	size_t input{0};
-	size_t output{0};
-	size_t requests{0};
-	size_t opens{0};
-	size_t reads{0};
-	size_t writes{0};
-	size_t brks{0};
-	size_t errors{0};
-}
-
 class sock final{
 	int epollfd{0};
 	int sockfd{0};
@@ -95,8 +84,10 @@ private:
 			throw"send";
 		}
 		meters::output+=c;
+		if(conf::print_traffic){
+			write(1,buf,c);
+		}
 		if(throw_if_send_not_complete&&(size_t)c!=len)throw"sendnotcomplete";
-
 		return(size_t)c;
 	}
 	inline size_t io_recv(void*buf,size_t maxlen){
@@ -111,6 +102,9 @@ private:
 			throw"err";
 		}
 		meters::input+=c;
+		if(conf::print_traffic){
+			write(1,buf,c);
+		}
 		return c;
 	}
 	inline void io_request_read(){
@@ -120,56 +114,6 @@ private:
 	inline void io_request_write(){
 		ev.events=EPOLLOUT|EPOLLET;
 		if(epoll_ctl(epollfd,EPOLL_CTL_MOD,sockfd,&ev))throw"epollmodwrite";
-	}
-};
-
-class client{
-public:
-	client(int argc,char**argv,char**env){
-		try{
-			main(argc,argv);
-		}catch(const char*msg){
-			puts(msg);
-		}catch(...){
-			puts("exception caught");
-		}
-	}
-private:
-	int	main(int argc,char**argv ){
-		if(argc!=5){
-			fprintf(stderr,"usage: %s [host] [port] [uri] [connections]\n",argv[0]);
-			return -1;
-		}
-		const char*hostname=argv[1];
-		const int port=atoi(argv[2]);
-		const char*uri=argv[3];
-		const int nsocks=atoi(argv[4]);
-		printf("\n   x i i x   m a r k\n\n");
-		printf("      clients: %d\n",nsocks);
-		if(port!=80)printf("          url: http://%s:%d%s\n",hostname,port,uri);
-		else        printf("          url: http://%s%s\n",hostname,uri);
-
-
-		const int epfd=epoll_create(nsocks);
-		if(epfd<0)throw"epoll_create";
-
-		sock*socks[nsocks];
-		for(auto&s:socks)s=new sock(epfd,hostname,port);
-		for(auto s:socks)s->open();
-//		for(int i=0;i<nsocks;i++)socks[i]=new sock(epfd,hostname,port);
-		struct epoll_event events[nsocks];
-		while(1){
-			const int n=epoll_wait(epfd,events,nsocks,-1);
-			for(int i=0;i<n;++i){
-				meters::events++;
-				struct epoll_event&ev=events[i];
-				if(ev.events&EPOLLOUT)meters::writes++;
-				if(ev.events&EPOLLIN)meters::reads++;
-				sock*sk=(sock*)ev.data.ptr;
-				sk->on_epoll_event(ev);
-				printf("   requests: %zu  events: %zu  writes: %zu    reads: %zu \r",meters::requests,meters::events,meters::writes,meters::reads);
-			}
-		}
 	}
 };
 }
