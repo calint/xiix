@@ -1,6 +1,7 @@
 #pragma once
 #include<stdio.h>
 namespace xiix{namespace meters{
+	size_t socks{0};
 	size_t events{0};
 	size_t input{0};
 	size_t output{0};

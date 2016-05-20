@@ -56,4 +56,17 @@ public:
 		}
 		return default_value;
 	}
+	inline const char*getarg(int n,const char*default_value){
+		auto vv=argv;
+		auto i=argc;
+		loop(){
+			if(i==1)return default_value;
+			vv++;
+			i--;
+			auto p=*vv;
+			if(*p=='-')continue;
+			n--;
+			if(n==0)return p;
+		}
+	}
 };}
