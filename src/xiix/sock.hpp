@@ -94,7 +94,8 @@ private:
 				snprintf(s,sizeof s,"GET %s HTTP/1.1\r\nHost: %s\r\n\r\n",uri,hostname);
 			io_send(s,n,true);
 			io_request_read();
-			headers=lul<const char*>(true,true);
+//			headers=lul<const char*>{true,true};//? does not invoke delete on previous
+			headers.clear();
 			st=recv_response_protocol;
 			return;
 		}
@@ -164,7 +165,7 @@ private:
 					header_key=(char*)malloc(lenz);
 					memcpy(header_key,headerp,lenz-1);
 					*(header_key+lenz-1)=0;
-					header_key=strtrm(header_key,header_key+lenz-2);
+//					header_key=strtrm(header_key,header_key+lenz-2);
 					strlwr(header_key);
 					st=recv_header_value;
 					headerp=bufp;
@@ -185,11 +186,12 @@ private:
 				const char ch=*bufp++;
 				bufi++;
 				if(ch=='\n'){
-					const size_t lenz=(size_t)(bufp-headerp);
+					*(bufp-1)=0;
+					headerp=strtrmleft(headerp,bufp-1);
+					const char*bufp_end=strtrmright(headerp,bufp-1);
+					const size_t lenz=(size_t)(bufp_end-headerp+2);// including \0
 					char*s=(char*)malloc(lenz);
-					memcpy(s,headerp,lenz-1);
-					*(s+lenz-1)=0;
-					s=strtrm(s,s+lenz-2);
+					memcpy(s,headerp,lenz);
 					headers.put(header_key,s);
 					header_key=nullptr;
 					headerp=bufp;
@@ -299,6 +301,20 @@ private:
 		while(p!=e&&isspace(*p))p++;
 		while(p!=e&&isspace(*e))*e--=0;
 		return p;
+	}
+	inline static char*strtrmleft(char*p,char*e){
+		while(p!=e&&isspace(*p))p++;
+		return p;
+	}
+	inline static char*strtrmright(char*p,char*e){
+		while(p!=e){
+			const char ch=*e;
+			if(!ch){e--;continue;}
+			if(!isspace(ch))break;
+			*e=0;
+			e--;
+		}
+		return e;
 	}
 	inline static void strlwr(char*p){
 		while(*p){
