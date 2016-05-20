@@ -58,9 +58,10 @@ private:
 						delete sk;
 						if(meters::socks==0)
 							return 0;
+					}else{
+						puts("*** exception caught");
+						puts(msg);
 					}
-					puts("*** exception caught");
-					puts(msg);
 				}catch(...){
 					puts("*** exception caught");
 					return-1;

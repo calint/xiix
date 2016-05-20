@@ -15,8 +15,8 @@ namespace xiix{
 			el*e=first;
 			while(e){
 				el*ee=e;
-				delete ee;
 				e=e->nxt;
+				delete ee;
 			}
 		}
 	public:
