@@ -120,14 +120,18 @@ private:
 				bufi++;
 				if(ch==' '){
 					*(bufp-1)=0;
-					strtrm(response_code,bufp-2);
+					const int code=atoi(response_code);
+					if(code!=200)
+						throw"responsecode";
 					response_text=bufp;
 					st=recv_response_text;
 					break;
 				}
 				if(ch=='\n'){
 					*(bufp-1)=0;
-					strtrm(response_code,bufp-2);
+					const int code=atoi(response_code);
+					if(code!=200)
+						throw"responsecode";
 					st=recv_header_key;
 					headerp=bufp;
 					break;

@@ -64,7 +64,7 @@ namespace xiix{template<class T>class lul final{
 				if(!fel)return;
 				el*nxt=fel->nxt;
 				if(delete_keys)free(fel->key);//?unrolltofourcases?
-				if(delete_data)free((void*)fel->data);//? crash
+				if(delete_data)free((void*)fel->data);
 				delete fel;
 				fel=nxt;
 			}
