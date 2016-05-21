@@ -7,6 +7,7 @@
 #include<sys/epoll.h>
 #include<errno.h>
 #include<unistd.h>
+#include<string.h>
 namespace xiix{class sock final{
 	int epollfd{0};
 	int sockfd{0};
@@ -50,11 +51,9 @@ public:
 			meters::reads++;
 			if(bufi!=bufnn)
 				throw"incompleteparse";
-			if(st==state::recv_content_chuncked and stc==state_chunked::size and chunk_size_hex_str==bufp){
-				chunk_size_hex_str=buf;
-//				throw"!!!";
-			}
 			bufnn=io_recv(buf,bufsize);
+			if(bufnn==0)
+				throw"brk";
 			bufp=buf;
 			bufe=buf+bufnn;
 			*(bufe+1)='\0';
@@ -77,9 +76,9 @@ private:
 	char*bufp{nullptr};
 	char*bufe{nullptr};
 	char*response_code{nullptr};
-	char*response_text{nullptr};
+//	char*response_text{nullptr};
 	lul<const char*>headers{true,true};
-	char*headerp{nullptr};
+//	char*headerp{nullptr};
 //	char*header_value{nullptr};
 	char*header_key{nullptr};
 	size_t content_length{0};
@@ -87,18 +86,74 @@ private:
 	bool repeat_request_after_done{false};
 	bool first_request{true};
 	state_chunked stc{size};
-	char*chunk_size_hex_str{nullptr};
+//	char*chunk_size_hex_str{nullptr};
 	size_t chunk_size_in_bytes{0};
 	size_t chunk_pos_in_bytes{0};
 
+	char strbuf[1024];
+	const size_t strbufsize{sizeof(strbuf)};
+	char*strbufp{strbuf};
+	char*strbufb{strbuf};
+	char*strbufe{strbuf+strbufsize};
+	inline void strbuf_rst(){
+		strbufp=strbufb=strbuf;
+		strbufe=strbuf+strbufsize;
+		*strbufp=0;
+	}
+	inline size_t strbuf_len()const{
+		return strbufp-strbufb;
+	}
+	inline void strbuf_add(const char&ch){
+		if((size_t)(strbufp-strbuf)==strbufsize)throw"overflow";
+		*strbufp++=ch;
+	}
+	inline void strbuf_copy_to(char*buf,size_t buflen){
+		const size_t len=strbufp-strbufb;
+		strncpy(buf,strbufb,len);
+	}
+	inline void strbuf_trimright(){
+		while(1){
+			if(strbufp==strbufb)return;
+			const char ch=*(strbufp-1);
+//			if(!ch){strbufp--;continue;}
+			if(!isspace(ch))
+				break;
+			strbufp--;
+			*strbufp='\0';
+		}
+	}
+	inline void strbuf_trimleft(){
+		while(strbufb!=strbufe){
+			const char ch=*strbufb;
+			if(isspace(ch)){strbufb++;continue;}
+			break;
+		}
+	}
+	inline void strbuf_tolowercase(){
+		char*p=strbufb;
+		while(p!=strbufe){
+			*p=(char)tolower(*p);
+			p++;
+		}
+	}
+	inline void strbuf_endofstring(){*strbufp='\0';}
+	inline void strbuf_backspace(const char replacement_char){
+		if(strbufp==strbufb)throw"underflow";
+		strbufp--;
+		*strbufp=replacement_char;
+	}
+
+
+
 	inline void clear_for_next_request(){
-		response_code=response_text=nullptr;
+//		response_code=response_text=nullptr;
+		response_code=nullptr;
 		content_length=content_index=0;
 		stc=state_chunked::size;
-		chunk_size_hex_str=nullptr;
+//		chunk_size_hex_str=nullptr;
 		chunk_size_in_bytes=0;
-		headerp=nullptr;
-		response_code=response_text=nullptr;
+		strbuf_rst();
+//		headerp=nullptr;
 		headers.clear();
 		if(bufi!=bufnn)throw"bufi!=bufnn";
 		bufi=bufnn=0;
@@ -153,7 +208,7 @@ private:
 					const int code=atoi(response_code);
 					if(code!=200)
 						throw"responsecode";
-					response_text=bufp;
+//					response_text=bufp;
 					st=recv_response_text;
 					break;
 				}
@@ -163,8 +218,9 @@ private:
 					response_code=nullptr;//? y
 					if(code!=200)
 						throw"responsecode";
+					strbuf_rst();
 					st=recv_header_key;
-					headerp=bufp;
+//					headerp=bufp;
 					break;
 				}
 			}
@@ -178,11 +234,12 @@ private:
 				const char ch=*bufp++;
 				bufi++;
 				if(ch=='\n'){
-					*(bufp-1)=0;
-					response_text=strtrmleft(response_text, bufp-1);
-					strtrmright(response_text,bufp-2);
+//					*(bufp-1)=0;
+//					response_text=strtrmleft(response_text, bufp-1);
+//					strtrmright(response_text,bufp-2);
+					strbuf_rst();
 					st=recv_header_key;
-					headerp=bufp;
+//					headerp=bufp;
 					break;
 				}
 			}
@@ -194,21 +251,23 @@ private:
 		if(st==recv_header_key){
 			while(bufi<bufnn){
 				const char ch=*bufp++;
+				strbuf_add(ch);
 				bufi++;
 				if(ch==':'){
 					// copy key //? assumes request headers read in one read
-					const size_t lenz=(size_t)(bufp-headerp);
-					header_key=(char*)malloc(lenz);
-					memcpy(header_key,headerp,lenz-1);
-					*(header_key+lenz-1)=0;
-//					header_key=strtrm(header_key,header_key+lenz-2);
-					strlwr(header_key);
-//					headerp=nullptr;//? y
+					strbuf_backspace('\0');
+					strbuf_trimleft();
+					strbuf_trimright();
+					strbuf_tolowercase();
+					strbuf_add('\0');
+					const size_t len=strbuf_len();
+					header_key=(char*)malloc(len);
+					strbuf_copy_to(header_key,len);
+					strbuf_rst();
 					st=recv_header_value;
-					headerp=bufp;
 					break;
 				}
-				if(ch=='\n'){headerp=nullptr;
+				if(ch=='\n'){
 					st=recv_content;
 					break;
 				}
@@ -221,17 +280,18 @@ private:
 		if(st==recv_header_value){
 			while(bufi<bufnn){
 				const char ch=*bufp++;
+				strbuf_add(ch);
 				bufi++;
 				if(ch=='\n'){
-					*(bufp-1)=0;
-					headerp=strtrmleft(headerp,bufp-1);
-					const char*bufp_end=strtrmright(headerp,bufp-1);
-					const size_t lenz=(size_t)(bufp_end-headerp+2);// including \0
-					char*s=(char*)malloc(lenz);
-					memcpy(s,headerp,lenz);
-					headers.put(header_key,s);
+					strbuf_backspace('\0');
+					strbuf_trimleft();
+					strbuf_trimright();
+					strbuf_add('\0');
+					char*value=(char*)malloc(strbuf_len());
+					strbuf_copy_to(value,strbuf_len());
+					headers.put(/*gives*/header_key,/*gives*/value);
 					header_key=nullptr;
-					headerp=bufp;
+					strbuf_rst();
 					st=recv_header_key;
 					break;
 				}
@@ -268,11 +328,10 @@ private:
 				if(t and !strcmp(t,"chunked")){
 					st=recv_content_chuncked;
 					stc=state_chunked::size;
-					chunk_size_hex_str=bufp;
-					if(!isxdigit(*chunk_size_hex_str))
-						throw"malformed";
+					strbuf_rst();
 
-				}else throw"unknowntransfertype";
+				}else
+					throw"unknowntransfertype";
 			}
 		}
 		if(st==recv_content_sized){
@@ -297,17 +356,19 @@ private:
 			if(stc==state_chunked::size){
 				while(bufi<bufnn){
 					const char ch=*bufp++;
+					strbuf_add(ch);
 					bufi++;
 					if(ch=='\n'){// chunk header e.g. "f07\r\n"
-						*(bufp-1)=0;
-						if(!isxdigit(*chunk_size_hex_str))
-							throw"malformed";
-					    char*p;
-					    strtrmright(chunk_size_hex_str,bufp-2);
-					    chunk_size_in_bytes=strtoul(chunk_size_hex_str,&p,16);
-						if(*p)
+					    strbuf_backspace('\0');
+					    strbuf_trimright();
+					    strbuf_add('\0');
+					    char hex_str[32];
+					    char*errorptr;
+					    strbuf_copy_to(hex_str,sizeof(hex_str));
+					    chunk_size_in_bytes=strtoul(hex_str,&errorptr,16);
+						if(*errorptr)
 							throw"chunksizefromhex";
-						chunk_pos_in_bytes=0;		chunk_size_hex_str=nullptr;
+						chunk_pos_in_bytes=0;
 						if(chunk_size_in_bytes==0)
 							stc=state_chunked::delimiter_end;
 						else
@@ -342,7 +403,7 @@ private:
 					const char ch=*bufp++;
 					bufi++;
 					if(ch=='\n'){// delimiter: "\r\n"
-						chunk_size_hex_str=bufp;
+						strbuf_rst();
 						stc=state_chunked::size;
 					    break;
 					}
@@ -433,11 +494,11 @@ private:
 		}
 		return e;
 	}
-	inline static void strlwr(char*p){
-		while(*p){
-			*p=(char)tolower(*p);
-			p++;
-		}
-	}
+//	inline static void strlwr(char*p){
+//		while(*p){
+//			*p=(char)tolower(*p);
+//			p++;
+//		}
+//	}
 
 };}
