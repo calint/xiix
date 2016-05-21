@@ -16,6 +16,7 @@ public:
 		}catch(...){
 			puts("exception caught");
 		}
+//		fsync(1);//?
 	}
 private:
 	inline int main(const int argc,const char**argv){

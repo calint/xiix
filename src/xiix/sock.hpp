@@ -14,7 +14,6 @@ namespace xiix{class sock final{
 	const int port{0};
 	const char*uri{"/"};
 	struct epoll_event ev;
-	lul<const char*>headers{true,true};
 public:
 	inline sock(const int epollfd,const char*hostname,const int port):epollfd{epollfd},hostname{hostname},port{port}{meters::socks++;}
 	inline~sock(){meters::socks--;}
@@ -49,7 +48,8 @@ public:
 	inline void on_epoll_event(struct epoll_event&ev){
 		if(ev.events&EPOLLIN){
 			meters::reads++;
-			if(bufi!=buflen)throw"incompleteparse";
+			if(bufi!=buflen)
+				throw"incompleteparse";
 			buflen=io_recv(buf,bufsize);
 			bufi=0;
 			bufp=buf;
@@ -62,6 +62,7 @@ public:
 
 private:
 	enum state{next_req,send_req,recv_response_protocol,recv_response_code,recv_response_text,recv_header_key,recv_header_value,recv_content,recv_content_sized,recv_content_chuncked};
+	enum state_chunked{size,data,delimiter,delimiter_end};
 	state st{next_req};
 	static const size_t bufsize{4*1024};
 	char buf[bufsize];
@@ -70,6 +71,7 @@ private:
 	char*bufp{nullptr};
 	char*response_code{nullptr};
 	char*response_text{nullptr};
+	lul<const char*>headers{true,true};
 	char*headerp{nullptr};
 //	char*header_value{nullptr};
 	char*header_key{nullptr};
@@ -77,6 +79,19 @@ private:
 	size_t content_index{0};
 	bool repeat_request_after_done{false};
 	bool first_request{true};
+	state_chunked stc{size};
+	char*chunk_size_hex_str{nullptr};
+	size_t chunk_size_in_bytes{0};
+	size_t chunk_pos_in_bytes{0};
+
+	inline void clear_for_next_request(){
+		response_code=response_text=nullptr;
+		content_length=content_index=0;
+		stc=state_chunked::size;
+		chunk_size_hex_str=nullptr;
+		chunk_size_in_bytes=0;
+		headers.clear();
+	}
 	inline void parse_buf(){loop(){
 		if(st==next_req){
 			if(first_request){
@@ -87,6 +102,7 @@ private:
 					return;
 				}
 			}
+			clear_for_next_request();
 			meters::requests++;
 			char s[1024];
 			const size_t n=(port!=80)?
@@ -148,7 +164,8 @@ private:
 				bufi++;
 				if(ch=='\n'){
 					*(bufp-1)=0;
-					strtrm(response_code,bufp-2);
+					response_text=strtrmleft(response_text, bufp-1);
+					strtrmright(response_text,bufp-2);
 					st=recv_header_key;
 					headerp=bufp;
 					break;
@@ -219,6 +236,7 @@ private:
 					write(1,bufp,read_size);
 				on_content(bufp,read_size,content_length);
 				bufi+=read_size;
+				bufp+=read_size;
 				content_index+=read_size;
 				if(content_index!=content_length){
 					st=recv_content_sized;
@@ -230,9 +248,13 @@ private:
 					throw"close";//? return or throw
 				continue;
 			}else{
-				const char*t=headers["transmission"];
-				if(t&&!strcmp(t,"chunked"))
+				const char*t=headers["transfer-encoding"];
+				if(t and !strcmp(t,"chunked")){
 					st=recv_content_chuncked;
+					stc=state_chunked::size;
+					chunk_size_hex_str=bufp;
+
+				}else throw"unknowntransfertype";
 			}
 		}
 		if(st==recv_content_sized){
@@ -254,14 +276,85 @@ private:
 				return;
 			}
 		}else if(st==recv_content_chuncked){
-			// chunk header
-				// 0 length end of send
-			// read loop
-			// chunk delimiter
+			if(stc==state_chunked::size){
+				while(bufi<buflen){
+					const char ch=*bufp++;
+					bufi++;
+					if(ch=='\n'){// chunk header e.g. "f07\r\n"
+						*(bufp-1)=0;
+					    char*p;
+					    strtrmright(chunk_size_hex_str,bufp-2);
+					    chunk_size_in_bytes=strtoul(chunk_size_hex_str,&p,16);
+						if(*p)
+							throw"chunksizefromhex";
+						chunk_pos_in_bytes=0;
+						if(chunk_size_in_bytes==0)
+							stc=state_chunked::delimiter_end;
+						else
+							stc=state_chunked::data;
+					    break;
+					}
+				}
+				if(bufi==buflen){
+					io_request_read();
+					return;
+				}
+			}
+			if(stc==state_chunked::data){
+				const size_t rem_buf=buflen-bufi;
+				const size_t rem_chunk=chunk_size_in_bytes-chunk_pos_in_bytes;
+				const size_t read_size=rem_chunk<=rem_buf?rem_chunk:rem_buf;
+				if(conf::print_content)
+					write(1,bufp,read_size);
+				on_content(bufp,read_size,chunk_size_in_bytes);
+				bufi+=read_size;
+				bufp+=read_size;
+				chunk_pos_in_bytes+=read_size;
+				if(chunk_pos_in_bytes!=chunk_size_in_bytes){
+					if(bufi==buflen)
+						io_request_read();//? if
+					return;
+				}
+				stc=state_chunked::delimiter;
+			}
+			if(stc==state_chunked::delimiter){
+				while(bufi<buflen){
+					const char ch=*bufp++;
+					bufi++;
+					if(ch=='\n'){// delimiter: "\r\n"
+						chunk_size_hex_str=bufp;
+						stc=state_chunked::size;
+					    break;
+					}
+				}
+				if(bufi==buflen){
+					io_request_read();
+					return;
+				}
+				continue;
+			}
+			if(stc==state_chunked::delimiter_end){
+				while(bufi<buflen){
+					const char ch=*bufp++;
+					bufi++;
+					if(ch=='\n'){// delimiter: "\r\n"
 
+						st=next_req;
+						if(st==next_req and !repeat_request_after_done)
+							throw"close";//? return or throw
+					    break;
+					}
+				}
+				if(st!=next_req and bufi==buflen){
+					io_request_read();
+					return;
+				}
+				continue;
+			}
 		}
 	}}
-	void on_content(/*scan*/const char*buf,size_t buflen,size_t totallen){
+
+	inline void on_content(/*scan*/const char*buf,size_t buflen,size_t totallen){
 //		printf("*** %zu  %zu   %s\n",buflen,totallen,buf);
 	}
 private:

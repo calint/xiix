@@ -4,16 +4,16 @@
 #include<functional>
 namespace xiix{template<class T>class lul final{
 	private:
-		unsigned int length{0};
-		bool delete_keys{false};//. bitset
+		bool delete_keys{false};//? bitset
 		bool delete_data{false};
+		unsigned int length{0};
 		//-- --  - -- -- - --  --  - - - - - --           - -- - -- --- ---  - - - - - -
 		class el{
 		public:
 			char*key{nullptr};
 			T data{nullptr};
 			el*nxt{nullptr};
-			inline el(char*key,T data):key{key},data{data}{}
+//			inline el(char*key,T data):key{key},data{data}{}
 		};
 		//-- --  - -- -- - --  --  - - - - - --           - -- - -- --- ---  - - - - - -
 		el*fel{nullptr};
@@ -31,7 +31,8 @@ namespace xiix{template<class T>class lul final{
 		}
 		inline void put(char*key,T data,bool allow_overwrite=true){
 			if(fel==nullptr){
-				fel=new el(key,data);
+//				fel=new el(key,data);
+				fel=new el{key,data};
 				return;
 			}
 			el*e=fel;
@@ -44,7 +45,7 @@ namespace xiix{template<class T>class lul final{
 					return;
 				}
 				if(!e->nxt){
-					e->nxt=new el(key,data);
+					e->nxt=new el{key,data};
 					return;
 				}
 				e=e->nxt;
