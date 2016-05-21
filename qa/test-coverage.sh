@@ -33,8 +33,10 @@ rm cmp &&
 #- ------ --- -- -- - -- -- - -- - - -- -- - -- - - - - -- - - -- - - -- -- - -- ---- -- -- ---
 echo ' * chunked bigger' &&
 ../xiix localhost 8088 /?chunkedbigger > cmp &&
+gunzip -k t05.cmp.gz &&
 diff -q cmp t05.cmp &&
 rm cmp &&
+rm t05.cmp &&
 
 #- ------ --- -- -- - -- -- - -- - - -- -- - -- - - - - -- - - -- - - -- -- - -- ---- -- -- ---
 
