@@ -1,41 +1,7 @@
 
-Fri May 20 19:49:05 ICT 2016
+Sat May 21 20:40:02 ICT 2016
 xiix memory leak check
 
-==9974== Memcheck, a memory error detector
-==9974== Copyright (C) 2002-2015, and GNU GPL'd, by Julian Seward et al.
-==9974== Using Valgrind-3.11.0 and LibVEX; rerun with -h for copyright info
-==9974== Command: ../xiix localhost 8088 / 5 -q
-==9974== 
-==9974== 
-==9974== HEAP SUMMARY:
-==9974==     in use at exit: 72,704 bytes in 1 blocks
-==9974==   total heap usage: 82 allocs, 81 frees, 135,759 bytes allocated
-==9974== 
-==9974== 72,704 bytes in 1 blocks are still reachable in loss record 1 of 1
-==9974==    at 0x4C2ABD0: malloc (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
-==9974==    by 0x4EC193F: pool (eh_alloc.cc:123)
-==9974==    by 0x4EC193F: __static_initialization_and_destruction_0 (eh_alloc.cc:250)
-==9974==    by 0x4EC193F: _GLOBAL__sub_I_eh_alloc.cc (eh_alloc.cc:326)
-==9974==    by 0x400F4A9: call_init.part.0 (in /usr/lib/ld-2.23.so)
-==9974==    by 0x400F5BA: _dl_init (in /usr/lib/ld-2.23.so)
-==9974==    by 0x4000DC9: ??? (in /usr/lib/ld-2.23.so)
-==9974==    by 0x5: ???
-==9974==    by 0xFFF000C12: ???
-==9974==    by 0xFFF000C1A: ???
-==9974==    by 0xFFF000C24: ???
-==9974==    by 0xFFF000C29: ???
-==9974==    by 0xFFF000C2B: ???
-==9974==    by 0xFFF000C2D: ???
-==9974== 
-==9974== LEAK SUMMARY:
-==9974==    definitely lost: 0 bytes in 0 blocks
-==9974==    indirectly lost: 0 bytes in 0 blocks
-==9974==      possibly lost: 0 bytes in 0 blocks
-==9974==    still reachable: 72,704 bytes in 1 blocks
-==9974==         suppressed: 0 bytes in 0 blocks
-==9974== 
-==9974== For counts of detected and suppressed errors, rerun with: -v
-==9974== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 
-Fri May 20 19:49:05 ICT 2016
+Sat May 21 20:40:02 ICT 2016
+

@@ -48,11 +48,17 @@ public:
 	inline void on_epoll_event(struct epoll_event&ev){
 		if(ev.events&EPOLLIN){
 			meters::reads++;
-			if(bufi!=buflen)
+			if(bufi!=bufnn)
 				throw"incompleteparse";
-			buflen=io_recv(buf,bufsize);
-			bufi=0;
+			if(st==state::recv_content_chuncked and stc==state_chunked::size and chunk_size_hex_str==bufp){
+				chunk_size_hex_str=buf;
+//				throw"!!!";
+			}
+			bufnn=io_recv(buf,bufsize);
 			bufp=buf;
+			bufe=buf+bufnn;
+			*(bufe+1)='\0';
+			bufi=0;
 		}
 		parse_buf();
 	}
@@ -65,10 +71,11 @@ private:
 	enum state_chunked{size,data,delimiter,delimiter_end};
 	state st{next_req};
 	static const size_t bufsize{4*1024};
-	char buf[bufsize];
+	char buf[bufsize+1];
 	size_t bufi{0};
-	size_t buflen{0};
+	size_t bufnn{0};
 	char*bufp{nullptr};
+	char*bufe{nullptr};
 	char*response_code{nullptr};
 	char*response_text{nullptr};
 	lul<const char*>headers{true,true};
@@ -90,7 +97,14 @@ private:
 		stc=state_chunked::size;
 		chunk_size_hex_str=nullptr;
 		chunk_size_in_bytes=0;
+		headerp=nullptr;
+		response_code=response_text=nullptr;
 		headers.clear();
+		if(bufi!=bufnn)throw"bufi!=bufnn";
+		bufi=bufnn=0;
+		*buf=0;
+		bufp=buf;
+		bufe=buf+1;
 	}
 	inline void parse_buf(){loop(){
 		if(st==next_req){
@@ -109,14 +123,14 @@ private:
 				snprintf(s,sizeof s,"GET %s HTTP/1.1\r\nHost: %s:%d\r\n\r\n",uri,hostname,port):
 				snprintf(s,sizeof s,"GET %s HTTP/1.1\r\nHost: %s\r\n\r\n",uri,hostname);
 			io_send(s,n,true);
-			io_request_read();
 //			headers=lul<const char*>{true,true};//? does not invoke delete on previous
-			headers.clear();
+//			headers.clear();
 			st=recv_response_protocol;
+			io_request_read();
 			return;
 		}
 		if(st==recv_response_protocol){
-			while(bufi<buflen){
+			while(bufi<bufnn){
 				const char ch=*bufp++;
 				bufi++;
 				if(ch==' '){
@@ -125,13 +139,13 @@ private:
 					break;
 				}
 			}
-			if(bufi==buflen){
+			if(bufi==bufnn){
 				io_request_read();
 				return;
 			}
 		}
 		if(st==recv_response_code){
-			while(bufi<buflen){
+			while(bufi<bufnn){
 				const char ch=*bufp++;
 				bufi++;
 				if(ch==' '){
@@ -146,6 +160,7 @@ private:
 				if(ch=='\n'){
 					*(bufp-1)=0;
 					const int code=atoi(response_code);
+					response_code=nullptr;//? y
 					if(code!=200)
 						throw"responsecode";
 					st=recv_header_key;
@@ -153,13 +168,13 @@ private:
 					break;
 				}
 			}
-			if(bufi==buflen){
+			if(bufi==bufnn){
 				io_request_read();
 				return;
 			}
 		}
 		if(st==recv_response_text){
-			while(bufi<buflen){
+			while(bufi<bufnn){
 				const char ch=*bufp++;
 				bufi++;
 				if(ch=='\n'){
@@ -171,13 +186,13 @@ private:
 					break;
 				}
 			}
-			if(bufi==buflen){
+			if(bufi==bufnn){
 				io_request_read();
 				return;
 			}
 		}
 		if(st==recv_header_key){
-			while(bufi<buflen){
+			while(bufi<bufnn){
 				const char ch=*bufp++;
 				bufi++;
 				if(ch==':'){
@@ -188,22 +203,23 @@ private:
 					*(header_key+lenz-1)=0;
 //					header_key=strtrm(header_key,header_key+lenz-2);
 					strlwr(header_key);
+//					headerp=nullptr;//? y
 					st=recv_header_value;
 					headerp=bufp;
 					break;
 				}
-				if(ch=='\n'){
+				if(ch=='\n'){headerp=nullptr;
 					st=recv_content;
 					break;
 				}
 			}
-			if(bufi==buflen){
+			if(bufi==bufnn){
 				io_request_read();
 				return;
 			}
 		}
 		if(st==recv_header_value){
-			while(bufi<buflen){
+			while(bufi<bufnn){
 				const char ch=*bufp++;
 				bufi++;
 				if(ch=='\n'){
@@ -220,7 +236,7 @@ private:
 					break;
 				}
 			}
-			if(bufi==buflen){
+			if(bufi==bufnn){
 				io_request_read();
 				return;
 			}
@@ -230,7 +246,7 @@ private:
 			if(s){
 				content_length=atoi(s);//? strtol
 				content_index=0;
-				const size_t rem=buflen-bufi;
+				const size_t rem=bufnn-bufi;
 				const size_t read_size=content_length<=rem?content_length:rem;
 				if(conf::print_content)
 					write(1,bufp,read_size);
@@ -240,7 +256,7 @@ private:
 				content_index+=read_size;
 				if(content_index!=content_length){
 					st=recv_content_sized;
-					if(bufi==buflen)io_request_read();//? if
+					if(bufi==bufnn)io_request_read();//? if
 					return;
 				}
 				st=next_req;
@@ -253,6 +269,8 @@ private:
 					st=recv_content_chuncked;
 					stc=state_chunked::size;
 					chunk_size_hex_str=bufp;
+					if(!isxdigit(*chunk_size_hex_str))
+						throw"malformed";
 
 				}else throw"unknowntransfertype";
 			}
@@ -271,23 +289,25 @@ private:
 					throw"close";//? return or throw
 				continue;
 			}
-			if(bufi==buflen){
+			if(bufi==bufnn){
 				io_request_read();
 				return;
 			}
 		}else if(st==recv_content_chuncked){
 			if(stc==state_chunked::size){
-				while(bufi<buflen){
+				while(bufi<bufnn){
 					const char ch=*bufp++;
 					bufi++;
 					if(ch=='\n'){// chunk header e.g. "f07\r\n"
 						*(bufp-1)=0;
+						if(!isxdigit(*chunk_size_hex_str))
+							throw"malformed";
 					    char*p;
 					    strtrmright(chunk_size_hex_str,bufp-2);
 					    chunk_size_in_bytes=strtoul(chunk_size_hex_str,&p,16);
 						if(*p)
 							throw"chunksizefromhex";
-						chunk_pos_in_bytes=0;
+						chunk_pos_in_bytes=0;		chunk_size_hex_str=nullptr;
 						if(chunk_size_in_bytes==0)
 							stc=state_chunked::delimiter_end;
 						else
@@ -295,13 +315,13 @@ private:
 					    break;
 					}
 				}
-				if(bufi==buflen){
+				if(bufi==bufnn){
 					io_request_read();
 					return;
 				}
 			}
 			if(stc==state_chunked::data){
-				const size_t rem_buf=buflen-bufi;
+				const size_t rem_buf=bufnn-bufi;
 				const size_t rem_chunk=chunk_size_in_bytes-chunk_pos_in_bytes;
 				const size_t read_size=rem_chunk<=rem_buf?rem_chunk:rem_buf;
 				if(conf::print_content)
@@ -311,14 +331,14 @@ private:
 				bufp+=read_size;
 				chunk_pos_in_bytes+=read_size;
 				if(chunk_pos_in_bytes!=chunk_size_in_bytes){
-					if(bufi==buflen)
+					if(bufi==bufnn)
 						io_request_read();//? if
 					return;
 				}
 				stc=state_chunked::delimiter;
 			}
 			if(stc==state_chunked::delimiter){
-				while(bufi<buflen){
+				while(bufi<bufnn){
 					const char ch=*bufp++;
 					bufi++;
 					if(ch=='\n'){// delimiter: "\r\n"
@@ -327,14 +347,14 @@ private:
 					    break;
 					}
 				}
-				if(bufi==buflen){
+				if(bufi==bufnn){
 					io_request_read();
 					return;
 				}
 				continue;
 			}
 			if(stc==state_chunked::delimiter_end){
-				while(bufi<buflen){
+				while(bufi<bufnn){
 					const char ch=*bufp++;
 					bufi++;
 					if(ch=='\n'){// delimiter: "\r\n"
@@ -345,7 +365,7 @@ private:
 					    break;
 					}
 				}
-				if(st!=next_req and bufi==buflen){
+				if(st!=next_req and bufi==bufnn){
 					io_request_read();
 					return;
 				}
