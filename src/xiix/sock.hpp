@@ -66,7 +66,7 @@ public:
 	}
 
 private:
-	enum state{next_req,send_req,recv_response_protocol,recv_response_code,recv_response_text,recv_header_key,recv_header_value,recv_content,recv_content_sized,recv_content_chuncked};
+	enum state{next_req,send_req,recv_response_protocol,recv_response_code,recv_response_text,recv_header_key,recv_header_value,recv_content,recv_content_sized,recv_content_chuncked,recv_content_until_connection_closed};
 	enum state_chunked{size,data,delimiter,delimiter_end};
 	state st{next_req};
 	static const size_t bufsize{4*1024};
@@ -132,7 +132,10 @@ private:
 	inline void strbuf_tolowercase(){
 		char*p=strbufb;
 		while(p!=strbufe){
-			*p=(char)tolower(*p);
+			const char ch=*p;
+//			printf("\n%c\n",ch);
+			const char chl=tolower(ch);
+			*p=chl;
 			p++;
 		}
 	}
@@ -330,8 +333,19 @@ private:
 					stc=state_chunked::size;
 					strbuf_rst();
 
-				}else
-					throw"unknowntransfertype";
+				}else{
+					const char*s=headers["connection"];
+					if(s and !strcmp("close",s)){
+						const size_t rem=bufnn-bufi;
+						if(conf::print_content)
+							write(1,bufp,rem);
+						on_content(bufp,rem,0);//? 0
+						bufi+=rem;
+						bufp+=rem;
+						st=recv_content_until_connection_closed;
+					}else
+						throw"unknowntransfertype";
+				}
 			}
 		}
 		if(st==recv_content_sized){
@@ -432,6 +446,15 @@ private:
 				}
 				continue;
 			}
+		}else if(st==state::recv_content_until_connection_closed){
+			const size_t rem=bufnn-bufi;
+			if(conf::print_content)
+				write(1,bufp,rem);
+			on_content(bufp,rem,0);//? maxsizet
+			bufi+=rem;
+			bufp+=rem;
+			io_request_read();
+			return;
 		}
 	}}
 
@@ -475,25 +498,25 @@ private:
 		ev.events=EPOLLOUT|EPOLLET;
 		if(epoll_ctl(epollfd,EPOLL_CTL_MOD,sockfd,&ev))throw"epollmodwrite";
 	}
-	inline static char*strtrm(char*p,char*e){
-		while(p!=e&&isspace(*p))p++;
-		while(p!=e&&isspace(*e))*e--=0;
-		return p;
-	}
-	inline static char*strtrmleft(char*p,char*e){
-		while(p!=e&&isspace(*p))p++;
-		return p;
-	}
-	inline static char*strtrmright(char*p,char*e){
-		while(p!=e){
-			const char ch=*e;
-			if(!ch){e--;continue;}
-			if(!isspace(ch))break;
-			*e=0;
-			e--;
-		}
-		return e;
-	}
+//	inline static char*strtrm(char*p,char*e){
+//		while(p!=e&&isspace(*p))p++;
+//		while(p!=e&&isspace(*e))*e--=0;
+//		return p;
+//	}
+//	inline static char*strtrmleft(char*p,char*e){
+//		while(p!=e&&isspace(*p))p++;
+//		return p;
+//	}
+//	inline static char*strtrmright(char*p,char*e){
+//		while(p!=e){
+//			const char ch=*e;
+//			if(!ch){e--;continue;}
+//			if(!isspace(ch))break;
+//			*e=0;
+//			e--;
+//		}
+//		return e;
+//	}
 //	inline static void strlwr(char*p){
 //		while(*p){
 //			*p=(char)tolower(*p);
