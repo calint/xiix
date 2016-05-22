@@ -1,0 +1,42 @@
+#pragma once
+#include<cassert>
+#include<string.h>
+namespace xiix{class spanb:span{
+	char*bb{nullptr};// begin of string
+	char*be{nullptr};// cursor  >bb and <len
+public:
+	inline spanb(char*bytes,const size_t len):span{(const char*)bytes,len},bb{bytes},be{bytes}{}
+	inline spanb&p(const char ch){
+		assert((be-pt)<(signed)len);
+		*be++=ch;
+		return*this;
+	}
+	inline spanb&p(const span&s){
+		const size_t sn=s.length();
+		assert((be-pt+sn)<len);
+		memcpy(bb,s.ptr(),sn);
+		be+=sn;
+		return*this;
+	}
+	inline spanb&p(const char*str){
+		const size_t ln=strlen(str);
+		assert(len-(be-pt)-ln);
+		strncpy(be,str,ln);
+		be+=ln;
+		return*this;
+	}
+	inline spanb&write_to(int fd){
+		const ssize_t ln=be-bb;
+		const ssize_t n=write(fd,bb,ln);
+		if(n<0)throw"write";
+		if((unsigned)n!=ln)throw"writeincomplete";
+		return*this;
+	}
+	inline size_t string_size()const{
+		return be-bb;
+	}
+	inline const span string_span()const{
+		const span o=subspan((const char*)bb,string_size());
+		return o;
+	}
+};}

@@ -1,5 +1,8 @@
 #pragma once
 #include"meters.hpp"
+#include"span.hpp"
+#include"spanb.hpp"
+#include"stringbuf.hpp"
 #include<string.h>
 #include<netdb.h>
 #include<fcntl.h>
@@ -8,149 +11,7 @@
 #include<unistd.h>
 #include<cassert>
 #include<stdlib.h>
-namespace xiix{
-
-
-
-
-
-class span{
-protected:
-	const char*pt{nullptr};
-	size_t len{0};
-public:
-	inline span(const span&o):pt{o.pt},len{o.len}{}
-	inline span&operator=(const span&o){pt=o.pt;len=o.len;return*this;}
-	inline span(const char*buffer,const size_t size):pt{buffer},len{size}{}
-	inline const char*ptr()const{return pt;}
-	inline size_t length()const{return len;}
-	inline bool is_empty()const{return len==0;}
-	inline span subspan(const char*start,const size_t size_in_bytes)const{
-//		printf(" %d     %d   \n",start>=p,(start+size_in_bytes)<(p+n));
-		assert(start>=pt  and  (start+size_in_bytes)<(pt+len));
-		span s=span(start,size_in_bytes);
-		return s;
-	}
-	inline span&write_to(int fd){
-		const ssize_t nn=write(fd,pt,len);
-		if(nn<0)throw"write";
-		if((unsigned)nn!=len)throw"writeincomplete";
-		return*this;
-	}
-};
-
-class spanb:span{
-	char*bb{nullptr};// begin of string
-	char*be{nullptr};// cursor  >bb and <len
-public:
-	inline spanb(char*bytes,const size_t len):span{(const char*)bytes,len},bb{bytes},be{bytes}{}
-	inline spanb&p(const char ch){
-		assert((be-pt)<(signed)len);
-		*be++=ch;
-		return*this;
-	}
-	inline spanb&p(const span&s){
-		const size_t sn=s.length();
-		assert((be-pt+sn)<len);
-		memcpy(bb,s.ptr(),sn);
-		be+=sn;
-		return*this;
-	}
-	inline spanb&p(const char*str){
-		const size_t ln=strlen(str);
-		assert(len-(be-pt)-ln);
-		strncpy(be,str,ln);
-		be+=ln;
-		return*this;
-	}
-	inline spanb&write_to(int fd){
-		const ssize_t ln=be-bb;
-		const ssize_t n=write(fd,bb,ln);
-		if(n<0)throw"write";
-		if((unsigned)n!=ln)throw"writeincomplete";
-		return*this;
-	}
-	inline size_t string_size()const{
-		return be-bb;
-	}
-	inline const span string_span()const{
-		const span o=subspan((const char*)bb,string_size());
-		return o;
-	}
-};
-
-class stringbuf{
-	char bb[256];
-	const size_t s{sizeof(bb)};
-	char*p{bb};
-	char*b{bb};
-	char*e{bb+s};
-public:
-	inline void rst(){
-		p=b=bb;
-		e=bb+s;
-		*p=0;
-	}
-	inline size_t len()const{return p-b;}
-	inline void append(const char&ch){
-		if((size_t)(p-bb)==s)throw"overflow";
-		*p++=ch;
-	}
-	inline void copy_to(char*buf,size_t buflen){
-		const size_t len=p-b;
-		strncpy(buf,b,len);
-	}
-	inline void trimright(){
-		while(1){
-			if(p==b)return;
-			const char ch=*(p-1);
-//			if(!ch){strbufp--;continue;}
-			if(!isspace(ch))
-				break;
-			p--;
-			*p='\0';
-		}
-	}
-	inline void trimleft(){
-		while(b!=e){
-			const char ch=*b;
-			if(isspace(ch)){b++;continue;}
-			break;
-		}
-	}
-	inline void tolowercase(){
-		char*p=b;
-		while(p!=e){
-			const char ch=*p;
-//			printf("\n%c\n",ch);
-			const char chl=tolower(ch);
-			*p=chl;
-			p++;
-		}
-	}
-	inline void backspace(const char replacement_char){
-		if(p==b)throw"underflow";
-		p--;
-		*p=replacement_char;
-	}
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class sock final{
+namespace xiix{class sock final{
 public:
 	inline sock(const int epollfd,const char*hostname,const int port):epollfd{epollfd},hostname{hostname},port{port}{meters::socks++;}
 	inline~sock(){meters::socks--;}
