@@ -16,15 +16,16 @@ namespace xiix{
 
 
 
-class span final{
+class span{
+protected:
 	const char*pt{nullptr};
 	size_t len{0};
 public:
-//	inline span(const span&o):p{o.p},n{o.n}{}
+	inline span(const span&o):pt{o.pt},len{o.len}{}
 	inline span&operator=(const span&o){pt=o.pt;len=o.len;return*this;}
 	inline span(const char*buffer,const size_t size):pt{buffer},len{size}{}
 	inline const char*ptr()const{return pt;}
-	inline size_t size_in_bytes()const{return len;}
+	inline size_t length()const{return len;}
 	inline span subspan(const char*start,const size_t size_in_bytes)const{
 //		printf(" %d     %d   \n",start>=p,(start+size_in_bytes)<(p+n));
 		assert(start>=pt  and  (start+size_in_bytes)<(pt+len));
@@ -60,13 +61,13 @@ public:
 		return be-bb;
 	}
 	inline buffic&p(const char ch){
-		assert((be-sp.ptr())<(signed)sp.size_in_bytes());
+		assert((be-sp.ptr())<(signed)sp.length());
 		*be++=ch;
 		return*this;
 	}
 	inline buffic&p(const span&o){
-		const size_t sn=o.size_in_bytes();
-		assert((be-sp.ptr()+sn)<sp.size_in_bytes());
+		const size_t sn=o.length();
+		assert((be-sp.ptr()+sn)<sp.length());
 		memcpy(bb,o.ptr(),sn);
 		be+=sn;
 		return*this;
@@ -84,6 +85,39 @@ public:
 	}
 };
 
+class spanbuf:span{
+	char*bb{nullptr};// begin of string
+	char*be{nullptr};// cursor  >bb and <len
+public:
+	inline spanbuf(char*bytes,const size_t len):span{(const char*)bytes,len},bb{bytes},be{bytes}{}
+	inline spanbuf&p(const char ch){
+		assert((be-pt)<(signed)len);
+		*be++=ch;
+		return*this;
+	}
+	inline spanbuf&p(const span&s){
+		const size_t sn=s.length();
+		assert((be-pt+sn)<len);
+		memcpy(bb,s.ptr(),sn);
+		be+=sn;
+		return*this;
+	}
+	inline spanbuf&write_to(int fd){
+		const ssize_t ln=be-bb;
+		const ssize_t n=write(fd,bb,ln);
+		if(n<0)throw"write";
+		if((unsigned)n!=ln)throw"writeincomplete";
+		return*this;
+	}
+	inline size_t string_size()const{
+		return be-bb;
+	}
+	inline const span string_span()const{
+		const span o=subspan((const char*)bb,string_size());
+		return o;
+	}
+};
+
 enum class states{waiting_to_send_next_request,reading_firstline,reading_headers,reading_content_sized,read_content_chunked,reading_content_until_disconnect,uploading_cont,sending_content_cont};
 
 class firstline final{
@@ -91,10 +125,10 @@ class firstline final{
 	buffic b{span{buf,sizeof buf}};
 public:
 	inline firstline(){*buf='\0';}
-	inline void assert_protocol(){}
+	inline bool assert_protocol(){return false;}
 	inline span get_result_code()const{return span(buf,2);}
 	inline span get_result_text()const{return span(buf,2);}
-	inline void copy_from(const span&spn){b.p(spn);}
+	inline void append(const span&spn){b.p(spn);}
 };
 
 class headers final{
@@ -152,8 +186,8 @@ public:
 //		b.p('c');
 //		b.write_to(1);
 ////		span s2=s.subspan(s.ptr()+1,8);
-//		span s2=s.subspan(s.ptr()+1,2);
 //		s2.write_to(1);
+//		span s2=s.subspan(s.ptr()+1,2);
 //
 //		char bb2[32];
 //		buffic b2(span(bb2,sizeof bb2));
@@ -161,10 +195,16 @@ public:
 //		b2.p('\0');
 //		b2.write_to(1);
 //
-		std::unique_ptr<char>bb(new char[32]);
-		span s(bb.get(),32);
+//		std::unique_ptr<char>bb(new char[32]);
+//		span s(bb.get(),32);
 
 //		span s(std::unique_ptr<char*>((char*)malloc(32)),32)
+//
+//
+//		char buf[32];
+//		spanbuf sb(buf,sizeof buf);
+//		sb.p('a').p('b').p('c').p('\0');
+//		sb.write_to(1);
 
 
 
