@@ -1,4 +1,5 @@
 #pragma once
+#include<functional>
 namespace xiix{
 	template<class T>class lst{
 	private:

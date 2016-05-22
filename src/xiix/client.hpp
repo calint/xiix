@@ -4,8 +4,6 @@
 #include"conf.hpp"
 #include"sock.hpp"
 #include"lst.hpp"
-#include<stdlib.h>
-#include<memory.h>
 namespace xiix{class client final{
 public:
 	inline client(const int argc,const char**argv,const char**env){
@@ -16,7 +14,6 @@ public:
 		}catch(...){
 			puts("exception caught");
 		}
-//		fsync(1);//?
 	}
 private:
 	inline int main(const int argc,const char**argv){

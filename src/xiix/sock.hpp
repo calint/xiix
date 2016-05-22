@@ -1,15 +1,13 @@
 #pragma once
 #include"meters.hpp"
-#include"lul.hpp"
 #include<string.h>
 #include<netdb.h>
 #include<fcntl.h>
 #include<sys/epoll.h>
 #include<errno.h>
 #include<unistd.h>
-#include<string.h>
 #include<cassert>
-#include<memory>
+#include<stdlib.h>
 namespace xiix{
 
 
@@ -26,6 +24,7 @@ public:
 	inline span(const char*buffer,const size_t size):pt{buffer},len{size}{}
 	inline const char*ptr()const{return pt;}
 	inline size_t length()const{return len;}
+	inline bool is_empty()const{return len==0;}
 	inline span subspan(const char*start,const size_t size_in_bytes)const{
 //		printf(" %d     %d   \n",start>=p,(start+size_in_bytes)<(p+n));
 		assert(start>=pt  and  (start+size_in_bytes)<(pt+len));
@@ -40,31 +39,31 @@ public:
 	}
 };
 
-class spanbuf:span{
+class spanb:span{
 	char*bb{nullptr};// begin of string
 	char*be{nullptr};// cursor  >bb and <len
 public:
-	inline spanbuf(char*bytes,const size_t len):span{(const char*)bytes,len},bb{bytes},be{bytes}{}
-	inline spanbuf&p(const char ch){
+	inline spanb(char*bytes,const size_t len):span{(const char*)bytes,len},bb{bytes},be{bytes}{}
+	inline spanb&p(const char ch){
 		assert((be-pt)<(signed)len);
 		*be++=ch;
 		return*this;
 	}
-	inline spanbuf&p(const span&s){
+	inline spanb&p(const span&s){
 		const size_t sn=s.length();
 		assert((be-pt+sn)<len);
 		memcpy(bb,s.ptr(),sn);
 		be+=sn;
 		return*this;
 	}
-	inline spanbuf&p(const char*str){
+	inline spanb&p(const char*str){
 		const size_t ln=strlen(str);
 		assert(len-(be-pt)-ln);
 		strncpy(be,str,ln);
 		be+=ln;
 		return*this;
 	}
-	inline spanbuf&write_to(int fd){
+	inline spanb&write_to(int fd){
 		const ssize_t ln=be-bb;
 		const ssize_t n=write(fd,bb,ln);
 		if(n<0)throw"write";
@@ -80,36 +79,61 @@ public:
 	}
 };
 
-enum class states{waiting_to_send_next_request,reading_firstline,reading_headers,reading_content_sized,read_content_chunked,reading_content_until_disconnect,uploading_cont,sending_content_cont};
-
-class firstline final{
-	char buf[4096];
-	spanbuf b{buf,sizeof buf};
+class stringbuf{
+	char bb[256];
+	const size_t s{sizeof(bb)};
+	char*p{bb};
+	char*b{bb};
+	char*e{bb+s};
 public:
-	inline firstline(){*buf='\0';}
-	inline bool assert_protocol(){return false;}
-	inline span get_result_code()const{return span(buf,2);}
-	inline span get_result_text()const{return span(buf,2);}
-	inline void append(const span&spn){b.p(spn);}
+	inline void rst(){
+		p=b=bb;
+		e=bb+s;
+		*p=0;
+	}
+	inline size_t len()const{return p-b;}
+	inline void append(const char&ch){
+		if((size_t)(p-bb)==s)throw"overflow";
+		*p++=ch;
+	}
+	inline void copy_to(char*buf,size_t buflen){
+		const size_t len=p-b;
+		strncpy(buf,b,len);
+	}
+	inline void trimright(){
+		while(1){
+			if(p==b)return;
+			const char ch=*(p-1);
+//			if(!ch){strbufp--;continue;}
+			if(!isspace(ch))
+				break;
+			p--;
+			*p='\0';
+		}
+	}
+	inline void trimleft(){
+		while(b!=e){
+			const char ch=*b;
+			if(isspace(ch)){b++;continue;}
+			break;
+		}
+	}
+	inline void tolowercase(){
+		char*p=b;
+		while(p!=e){
+			const char ch=*p;
+//			printf("\n%c\n",ch);
+			const char chl=tolower(ch);
+			*p=chl;
+			p++;
+		}
+	}
+	inline void backspace(const char replacement_char){
+		if(p==b)throw"underflow";
+		p--;
+		*p=replacement_char;
+	}
 };
-
-class headers final{
-	char buf[4096];
-	spanbuf b{buf,sizeof buf};
-public:
-	inline headers(){*buf='\0';}
-	inline const char*operator[](const char*key){
-		return get_header_value(key);
-	}
-	inline const char*get_header_value(const char*key){
-		return"close";
-	}
-	inline void append(const span&spn){
-		b.p(spn);
-	}
-};
-
-
 
 
 
@@ -127,12 +151,6 @@ public:
 
 
 class sock final{
-	int epollfd{0};
-	int sockfd{0};
-	const char*hostname{nullptr};
-	const int port{0};
-	const char*uri{"/"};
-	struct epoll_event ev;
 public:
 	inline sock(const int epollfd,const char*hostname,const int port):epollfd{epollfd},hostname{hostname},port{port}{meters::socks++;}
 	inline~sock(){meters::socks--;}
@@ -140,38 +158,6 @@ public:
 	inline sock&seturi(/*refs*/const char*s){uri=s;return*this;}
 	inline sock&setrepeatmode(const bool b){repeat_request_after_done=b;return*this;}
 	inline void connect(){
-//		char bb[5];
-//		span s(bb,sizeof bb);
-//		buffic b(s);
-//		b.p('a');
-//		b.p('b');
-//		b.p('c');
-//		b.write_to(1);
-////		span s2=s.subspan(s.ptr()+1,8);
-//		s2.write_to(1);
-//		span s2=s.subspan(s.ptr()+1,2);
-//
-//		char bb2[32];
-//		buffic b2(span(bb2,sizeof bb2));
-//		b2.p(b.string_span());
-//		b2.p('\0');
-//		b2.write_to(1);
-//
-//		std::unique_ptr<char>bb(new char[32]);
-//		span s(bb.get(),32);
-
-//		span s(std::unique_ptr<char*>((char*)malloc(32)),32)
-//
-//
-//		char buf[32];
-//		spanbuf sb(buf,sizeof buf);
-//		sb.p('a').p('b').p('c');
-//		sb.write_to(1);
-//		span s=sb.string_span();
-//		s.write_to(1);
-//		sb.p(" hello world ");
-//		sb.write_to(1);
-
 		meters::opens++;
 		sockfd=socket(AF_INET,SOCK_STREAM,0);
 		if(sockfd<0)throw"socket";
@@ -199,125 +185,112 @@ public:
 	inline void on_epoll_event(struct epoll_event&ev){
 		if(ev.events&EPOLLIN){
 			meters::reads++;
-			if(bufi!=bufnn)
+			if(!buf.needs_read())
 				throw"incompleteparse";
-			bufnn=io_recv(buf,bufsize);
-			if(bufnn==0)
-				throw"brk";
-			bufp=buf;
-			bufe=buf+bufnn;
-			*(bufe+1)='\0';
-			bufi=0;
+			buf.clr();
+			const size_t nn=io_recv((void*)buf.pos(),bufsize);
+			if(nn==0)throw"brk";
+			buf.set_len(nn);
 		}
 		parse_buf();
 	}
-	inline void disconnect(){
-		close(sockfd);
-	}
+	inline void disconnect(){close(sockfd);}
 
 private:
-	enum state{next_req,send_req,recv_response_protocol,recv_response_code,recv_response_text,recv_header_key,recv_header_value,recv_content,recv_content_sized,recv_content_chuncked,recv_content_until_connection_closed};
+	int epollfd{0};
+	int sockfd{0};
+	const char*hostname{nullptr};
+	const int port{0};
+	const char*uri{"/"};
+	struct epoll_event ev;
+
+	enum state{waiting_to_send_next_request,reading_firstline,reading_headers,reading_content_sized,reading_content_chunked,reading_content_until_disconnect,uploading,sending_content};
+	state st{waiting_to_send_next_request};
 	enum state_chunked{size,data,delimiter,delimiter_end};
-	state st{next_req};
-	static const size_t bufsize{4*1024};
-	char buf[bufsize+1];
-	size_t bufi{0};
-	size_t bufnn{0};
-	char*bufp{nullptr};
-	char*bufe{nullptr};
-	char*response_code{nullptr};
-//	char*response_text{nullptr};
-	lul<const char*>headers{true,true};
-//	char*headerp{nullptr};
-//	char*header_value{nullptr};
-	char*header_key{nullptr};
-	size_t content_length{0};
-	size_t content_index{0};
-	bool repeat_request_after_done{false};
-	bool first_request{true};
 	state_chunked stc{size};
-//	char*chunk_size_hex_str{nullptr};
-	size_t chunk_size_in_bytes{0};
-	size_t chunk_pos_in_bytes{0};
 
-	char strbuf[1024];
-	const size_t strbufsize{sizeof(strbuf)};
-	char*strbufp{strbuf};
-	char*strbufb{strbuf};
-	char*strbufe{strbuf+strbufsize};
-	inline void strbuf_rst(){
-		strbufp=strbufb=strbuf;
-		strbufe=strbuf+strbufsize;
-		*strbufp=0;
-	}
-	inline size_t strbuf_len()const{
-		return strbufp-strbufb;
-	}
-	inline void strbuf_add(const char&ch){
-		if((size_t)(strbufp-strbuf)==strbufsize)throw"overflow";
-		*strbufp++=ch;
-	}
-	inline void strbuf_copy_to(char*buf,size_t buflen){
-		const size_t len=strbufp-strbufb;
-		strncpy(buf,strbufb,len);
-	}
-	inline void strbuf_trimright(){
-		while(1){
-			if(strbufp==strbufb)return;
-			const char ch=*(strbufp-1);
-//			if(!ch){strbufp--;continue;}
-			if(!isspace(ch))
-				break;
-			strbufp--;
-			*strbufp='\0';
-		}
-	}
-	inline void strbuf_trimleft(){
-		while(strbufb!=strbufe){
-			const char ch=*strbufb;
-			if(isspace(ch)){strbufb++;continue;}
-			break;
-		}
-	}
-	inline void strbuf_tolowercase(){
-		char*p=strbufb;
-		while(p!=strbufe){
-			const char ch=*p;
-//			printf("\n%c\n",ch);
-			const char chl=tolower(ch);
-			*p=chl;
-			p++;
-		}
-	}
-	inline void strbuf_endofstring(){*strbufp='\0';}
-	inline void strbuf_backspace(const char replacement_char){
-		if(strbufp==strbufb)throw"underflow";
-		strbufp--;
-		*strbufp=replacement_char;
-	}
+	bool repeat_request_after_done{false};
+	bool is_first_request{true};
 
+	class{
+		span sp{nullptr,0};
+	public:
+		inline void set_span(const span&s){sp=s;}
+		inline bool assert_protocol(){return false;}
+		inline span get_result_code()const{return span(nullptr,0);}
+		inline span get_result_text()const{return span(nullptr,0);}
+	}request;
 
+	class{
+		span sp{nullptr,0};
+	public:
+		inline void set_span(const span&s){sp=s;}
+		inline span operator[](const char*key)const{return get_header_value(key);}
+		inline span get_header_value(const char*key)const{
+			const char*p=sp.ptr();
+
+			return span{"close",5};
+		}
+	}header;
+
+	class{
+		size_t len{0};
+		size_t pos{0};
+	public:
+		inline void init_for_recieve(const size_t nbytes){pos=0;len=nbytes;}
+		inline void clr(){len=pos=0;}
+		inline size_t rem()const{return len-pos;}
+		inline size_t length()const{return len;}
+		inline bool needs_read()const{return pos!=len;}
+		inline void unsafe_pos_inc(const size_t nbytes){pos+=nbytes;}
+	}content;
+
+	class{
+		size_t len{0};
+		size_t pos{0};
+	public:
+		inline void init_for_receive(const size_t chunksize){len=chunksize;pos=0;}
+		inline void clr(){len=pos=0;}
+		inline size_t rem()const{return len-pos;}
+		inline size_t length()const{return len;}
+		inline bool needs_read()const{return pos!=len;}
+		inline void unsafe_pos_inc(const size_t nbytes){pos+=nbytes;}
+	}chunk;
+
+	static const size_t bufsize{4*1024};
+	class{
+		char b[bufsize+1];
+		char*e{nullptr};//position
+		char*eob{nullptr};//end of buffer
+	public:
+		inline bool needs_read()const{return e==eob;}
+		inline void clr(){e=b;*b='\0';}
+		inline size_t rem()const{return eob-e;}
+		inline void set_len(const size_t len){eob=b+len;*eob='\0';}
+		inline const char*pos()const{return e;}
+		inline char unsafe_next_char(){return *e++;}
+		inline void unsafe_pos_inc(const size_t nbytes){e+=nbytes;}
+		inline span get_span()const{return span(b,e-b-1);}
+
+	}buf;
+
+	const char*header_start_ptr{nullptr};
+	stringbuf sb;
 
 	inline void clear_for_next_request(){
-//		response_code=response_text=nullptr;
-		response_code=nullptr;
-		content_length=content_index=0;
+		content.clr();
+		chunk.clr();
+		sb.rst();
+		if(!buf.needs_read())throw"bufp!=bufe";
+		buf.clr();
 		stc=state_chunked::size;
-//		chunk_size_hex_str=nullptr;
-		chunk_size_in_bytes=0;
-		strbuf_rst();
-//		headerp=nullptr;
-		headers.clear();
-		if(bufi!=bufnn)throw"bufi!=bufnn";
-		bufi=bufnn=0;
-		*buf=0;
-		bufp=buf;
-		bufe=buf+1;
+		header_start_ptr={nullptr};
 	}
 	inline void parse_buf(){loop(){
-		if(st==next_req){
-			if(first_request){
-				first_request=false;
+		char prevch{0};
+		if(st==waiting_to_send_next_request){
+			if(is_first_request){
+				is_first_request=false;
 			}else{
 				if(!repeat_request_after_done){
 					disconnect();
@@ -331,284 +304,164 @@ private:
 				snprintf(s,sizeof s,"GET %s HTTP/1.1\r\nHost: %s:%d\r\n\r\n",uri,hostname,port):
 				snprintf(s,sizeof s,"GET %s HTTP/1.1\r\nHost: %s\r\n\r\n",uri,hostname);
 			io_send(s,n,true);
-//			headers=lul<const char*>{true,true};//? does not invoke delete on previous
-//			headers.clear();
-			st=recv_response_protocol;
+			st=reading_firstline;
 			io_request_read();
 			return;
 		}
-		if(st==recv_response_protocol){
-			while(bufi<bufnn){
-				const char ch=*bufp++;
-				bufi++;
-				if(ch==' '){
-					st=recv_response_code;
-					response_code=bufp;
-					break;
-				}
-			}
-			if(bufi==bufnn){
-				io_request_read();
-				return;
-			}
-		}
-		if(st==recv_response_code){
-			while(bufi<bufnn){
-				const char ch=*bufp++;
-				bufi++;
-				if(ch==' '){
-					*(bufp-1)=0;
-					const int code=atoi(response_code);
-					if(code!=200)
-						throw"responsecode";
-//					response_text=bufp;
-					st=recv_response_text;
-					break;
-				}
+		if(st==reading_firstline){
+			while(!buf.needs_read()){
+				const char ch=buf.unsafe_next_char();
 				if(ch=='\n'){
-					*(bufp-1)=0;
-					const int code=atoi(response_code);
-					response_code=nullptr;//? y
-					if(code!=200)
-						throw"responsecode";
-					strbuf_rst();
-					st=recv_header_key;
-//					headerp=bufp;
+					const span spn=buf.get_span();
+					request.set_span(spn);
+					header_start_ptr=buf.pos();
+					st=reading_headers;
 					break;
 				}
 			}
-			if(bufi==bufnn){
-				io_request_read();
-				return;
-			}
+			if(buf.needs_read()){io_request_read();return;}
 		}
-		if(st==recv_response_text){
-			while(bufi<bufnn){
-				const char ch=*bufp++;
-				bufi++;
-				if(ch=='\n'){
-//					*(bufp-1)=0;
-//					response_text=strtrmleft(response_text, bufp-1);
-//					strtrmright(response_text,bufp-2);
-					strbuf_rst();
-					st=recv_header_key;
-//					headerp=bufp;
-					break;
-				}
-			}
-			if(bufi==bufnn){
-				io_request_read();
-				return;
-			}
-		}
-		if(st==recv_header_key){
-			while(bufi<bufnn){
-				const char ch=*bufp++;
-				strbuf_add(ch);
-				bufi++;
-				if(ch==':'){
-					// copy key //? assumes request headers read in one read
-					strbuf_backspace('\0');
-					strbuf_trimleft();
-					strbuf_trimright();
-					strbuf_tolowercase();
-					strbuf_add('\0');
-					const size_t len=strbuf_len();
-					header_key=(char*)malloc(len);
-					strbuf_copy_to(header_key,len);
-					strbuf_rst();
-					st=recv_header_value;
-					break;
-				}
-				if(ch=='\n'){
-					st=recv_content;
-					break;
-				}
-			}
-			if(bufi==bufnn){
-				io_request_read();
-				return;
-			}
-		}
-		if(st==recv_header_value){
-			while(bufi<bufnn){
-				const char ch=*bufp++;
-				strbuf_add(ch);
-				bufi++;
-				if(ch=='\n'){
-					strbuf_backspace('\0');
-					strbuf_trimleft();
-					strbuf_trimright();
-					strbuf_add('\0');
-					char*value=(char*)malloc(strbuf_len());
-					strbuf_copy_to(value,strbuf_len());
-					headers.put(/*gives*/header_key,/*gives*/value);
-					header_key=nullptr;
-					strbuf_rst();
-					st=recv_header_key;
-					break;
-				}
-			}
-			if(bufi==bufnn){
-				io_request_read();
-				return;
-			}
-		}
-		if(st==recv_content){
-			const char*s=headers["content-length"];
-			if(s){
-				content_length=atoi(s);//? strtol
-				content_index=0;
-				const size_t rem=bufnn-bufi;
-				const size_t read_size=content_length<=rem?content_length:rem;
-				if(conf::print_content)
-					write(1,bufp,read_size);
-				on_content(bufp,read_size,content_length);
-				bufi+=read_size;
-				bufp+=read_size;
-				content_index+=read_size;
-				if(content_index!=content_length){
-					st=recv_content_sized;
-					if(bufi==bufnn)io_request_read();//? if
-					return;
-				}
-				st=next_req;
-				if(st==next_req and !repeat_request_after_done)
-					throw"close";//? return or throw
-				continue;
-			}else{
-				const char*t=headers["transfer-encoding"];
-				if(t and !strcmp(t,"chunked")){
-					st=recv_content_chuncked;
-					stc=state_chunked::size;
-					strbuf_rst();
+		if(st==reading_headers){
+			while(!buf.needs_read()){
+				const char ch=buf.unsafe_next_char();
+				if(ch!='\n'){prevch=ch;continue;}
+				if(prevch!='\n')continue;else{prevch='\n';continue;}
+				const span spn(header_start_ptr,buf.pos()-header_start_ptr-1);
+				header.set_span(spn);
 
+				span s=header["content-length"];
+				if(s.length()>0){
+					content.init_for_recieve(atoi(s.ptr()));
+					const size_t rem=buf.rem();
+					const size_t read_size=content.length()<=rem?content.length():rem;
+					if(conf::print_content)
+						write(1,buf.pos(),read_size);
+					on_content(buf.pos(),read_size,content.length());
+					buf.unsafe_pos_inc(read_size);
+					content.unsafe_pos_inc(read_size);
+					if(content.needs_read()){
+						st=reading_content_sized;
+						io_request_read();
+						return;
+					}
+					st=waiting_to_send_next_request;
+					if(st==waiting_to_send_next_request and !repeat_request_after_done)
+						throw"close";//? return or throw
+					continue;
 				}else{
-					const char*s=headers["connection"];
-					if(s and !strcmp("close",s)){
-						const size_t rem=bufnn-bufi;
-						if(conf::print_content)
-							write(1,bufp,rem);
-						on_content(bufp,rem,0);//? 0
-						bufi+=rem;
-						bufp+=rem;
-						st=recv_content_until_connection_closed;
-					}else
-						throw"unknowntransfertype";
+					span t=header["transfer-encoding"];
+					if(!t.is_empty() and !strcmp(t.ptr(),"chunked")){
+						st=reading_content_chunked;
+						stc=state_chunked::size;
+						sb.rst();
+
+					}else{
+						span s=header["connection"];
+						if(!s.is_empty() and !strcmp("close",s.ptr())){
+							const size_t rem=buf.rem();
+							if(conf::print_content)
+								write(1,buf.pos(),rem);
+							on_content(buf.pos(),rem,0);//? 0
+							buf.unsafe_pos_inc(rem);
+							st=reading_content_until_disconnect;
+						}else
+							throw"unknowntransfertype";
+					}
 				}
+				st=reading_content_sized;
 			}
+			if(buf.needs_read()){io_request_read();return;}
 		}
-		if(st==recv_content_sized){
-			const size_t rem=content_length-content_index;
+		if(st==reading_content_sized){
+			const size_t rem=content.rem();
 			const size_t read_size=rem>bufsize?bufsize:rem;
 			if(conf::print_content)
-				write(1,buf,read_size);
-			on_content(buf,read_size,content_length);
-			bufi+=read_size;
-			content_index+=read_size;
-			if(content_index==content_length){
-				st=next_req;
-				if(st==next_req and !repeat_request_after_done)
-					throw"close";//? return or throw
+				write(1,buf.pos(),read_size);
+			on_content(buf.pos(),read_size,content.length());
+			content.unsafe_pos_inc(read_size);
+			if(!content.needs_read()){
+				st=waiting_to_send_next_request;
+				if(st==waiting_to_send_next_request and !repeat_request_after_done)
+					throw"close";
 				continue;
 			}
-			if(bufi==bufnn){
-				io_request_read();
-				return;
-			}
-		}else if(st==recv_content_chuncked){
+			if(buf.needs_read()){io_request_read();return;}
+		}else if(st==reading_content_chunked){
 			if(stc==state_chunked::size){
-				while(bufi<bufnn){
-					const char ch=*bufp++;
-					strbuf_add(ch);
-					bufi++;
+				while(!buf.needs_read()){
+					const char ch=buf.unsafe_next_char();
+					sb.append(ch);
 					if(ch=='\n'){// chunk header e.g. "f07\r\n"
-					    strbuf_backspace('\0');
-					    strbuf_trimright();
-					    strbuf_add('\0');
+						sb.backspace('\0');
+						sb.trimright();
+						sb.append('\0');
 					    char hex_str[32];
 					    char*errorptr;
-					    strbuf_copy_to(hex_str,sizeof(hex_str));
-					    chunk_size_in_bytes=strtoul(hex_str,&errorptr,16);
+					    sb.copy_to(hex_str,sizeof(hex_str));
+					    const size_t chunklen=strtoul(hex_str,&errorptr,16);
 						if(*errorptr)throw"chunksizefromhex";
-						chunk_pos_in_bytes=0;
-						if(chunk_size_in_bytes==0)
+					    chunk.init_for_receive(chunklen);
+						if(chunklen==0)
 							stc=state_chunked::delimiter_end;
 						else
 							stc=state_chunked::data;
 					    break;
 					}
 				}
-				if(bufi==bufnn){
-					io_request_read();
-					return;
-				}
+				if(buf.needs_read()){io_request_read();return;}
 			}
 			if(stc==state_chunked::data){
-				const size_t rem_buf=bufnn-bufi;
-				const size_t rem_chunk=chunk_size_in_bytes-chunk_pos_in_bytes;
+				const size_t rem_buf=buf.rem();
+				const size_t rem_chunk=chunk.rem();
 				const size_t read_size=rem_chunk<=rem_buf?rem_chunk:rem_buf;
 				if(conf::print_content)
-					write(1,bufp,read_size);
-				on_content(bufp,read_size,chunk_size_in_bytes);
-				bufi+=read_size;
-				bufp+=read_size;
-				chunk_pos_in_bytes+=read_size;
-				if(chunk_pos_in_bytes!=chunk_size_in_bytes){
-					if(bufi==bufnn)
-						io_request_read();//? if
-					return;
+					write(1,buf.pos(),read_size);
+				on_content(buf.pos(),read_size,chunk.length());
+				buf.unsafe_pos_inc(read_size);
+				chunk.unsafe_pos_inc(read_size);
+				if(chunk.needs_read()){
+					if(buf.needs_read()){io_request_read();return;}
+					throw"illegalstate";
 				}
 				stc=state_chunked::delimiter;
 			}
 			if(stc==state_chunked::delimiter){
-				while(bufi<bufnn){
-					const char ch=*bufp++;
-					bufi++;
+				while(!buf.needs_read()){
+					const char ch=buf.unsafe_next_char();
 					if(ch=='\n'){// delimiter: "\r\n"
-						strbuf_rst();
+						sb.rst();
 						stc=state_chunked::size;
 					    break;
 					}
 				}
-				if(bufi==bufnn){
-					io_request_read();
-					return;
-				}
+				if(buf.needs_read()){io_request_read();return;}
 				continue;
 			}else if(stc==state_chunked::delimiter_end){
-				while(bufi<bufnn){
-					const char ch=*bufp++;
-					bufi++;
+				while(!buf.needs_read()){
+					const char ch=buf.unsafe_next_char();
 					if(ch=='\n'){// delimiter: "\r\n"
-						st=next_req;
-						if(st==next_req and !repeat_request_after_done)
-							throw"close";//? return or throw
+						st=waiting_to_send_next_request;
+						if(st==waiting_to_send_next_request and !repeat_request_after_done)
+							throw"close";
 					    break;
 					}
 				}
-				if(st!=next_req and bufi==bufnn){
-					io_request_read();
-					return;
-				}
+				if(st!=waiting_to_send_next_request and buf.needs_read()){io_request_read();return;}
 				continue;
 			}
-		}else if(st==state::recv_content_until_connection_closed){
-			const size_t rem=bufnn-bufi;
+		}else if(st==reading_content_until_disconnect){
+			const size_t rem=buf.rem();
 			if(conf::print_content)
-				write(1,bufp,rem);
-			on_content(bufp,rem,0);//? maxsizet
-			bufi+=rem;
-			bufp+=rem;
+				write(1,buf.pos(),rem);
+			on_content(buf.pos(),rem,0);//? maxsizet
+			buf.unsafe_pos_inc(rem);
 			io_request_read();
 			return;
 		}
 	}}
-
 	inline void on_content(/*scan*/const char*buf,size_t buflen,size_t totallen){
 //		printf("*** %zu  %zu   %s\n",buflen,totallen,buf);
 	}
-private:
 	inline size_t io_send(const void*buf,size_t len,bool throw_if_send_not_complete=false){
 		const ssize_t c=send(sockfd,buf,len,MSG_NOSIGNAL);
 		if(c<0){
