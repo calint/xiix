@@ -40,51 +40,6 @@ public:
 	}
 };
 
-class buffic final{
-	span sp;// span
-	char*bb{nullptr};// begin of string
-	char*be{nullptr};// end of string + 1
-public:
-	inline buffic(const span&s):sp(s){
-		bb=be=(char*)s.ptr();
-	}
-	inline buffic&use(const span&o){
-		sp=o;
-		bb=be=(char*)sp.ptr();
-		return*this;
-	}
-	inline buffic&reset(){
-		bb=be=(char*)sp.ptr();
-		return*this;
-	}
-	inline size_t string_size_in_bytes(){
-		return be-bb;
-	}
-	inline buffic&p(const char ch){
-		assert((be-sp.ptr())<(signed)sp.length());
-		*be++=ch;
-		return*this;
-	}
-	inline buffic&p(const span&o){
-		const size_t sn=o.length();
-		assert((be-sp.ptr()+sn)<sp.length());
-		memcpy(bb,o.ptr(),sn);
-		be+=sn;
-		return*this;
-	}
-	inline buffic&write_to(int fd){
-		const ssize_t ln=be-bb;
-		const ssize_t n=write(fd,bb,ln);
-		if(n<0)throw"write";
-		if((unsigned)n!=ln)throw"writeincomplete";
-		return*this;
-	}
-	inline const span string_span(){//? const
-		const span o=sp.subspan((const char*)bb,string_size_in_bytes());
-		return o;
-	}
-};
-
 class spanbuf:span{
 	char*bb{nullptr};// begin of string
 	char*be{nullptr};// cursor  >bb and <len
@@ -100,6 +55,13 @@ public:
 		assert((be-pt+sn)<len);
 		memcpy(bb,s.ptr(),sn);
 		be+=sn;
+		return*this;
+	}
+	inline spanbuf&p(const char*str){
+		const size_t ln=strlen(str);
+		assert(len-(be-pt)-ln);
+		strncpy(be,str,ln);
+		be+=ln;
 		return*this;
 	}
 	inline spanbuf&write_to(int fd){
@@ -122,7 +84,7 @@ enum class states{waiting_to_send_next_request,reading_firstline,reading_headers
 
 class firstline final{
 	char buf[4096];
-	buffic b{span{buf,sizeof buf}};
+	spanbuf b{buf,sizeof buf};
 public:
 	inline firstline(){*buf='\0';}
 	inline bool assert_protocol(){return false;}
@@ -133,7 +95,7 @@ public:
 
 class headers final{
 	char buf[4096];
-	buffic b{span{buf,sizeof buf}};
+	spanbuf b{buf,sizeof buf};
 public:
 	inline headers(){*buf='\0';}
 	inline const char*operator[](const char*key){
@@ -203,10 +165,12 @@ public:
 //
 //		char buf[32];
 //		spanbuf sb(buf,sizeof buf);
-//		sb.p('a').p('b').p('c').p('\0');
+//		sb.p('a').p('b').p('c');
 //		sb.write_to(1);
-
-
+//		span s=sb.string_span();
+//		s.write_to(1);
+//		sb.p(" hello world ");
+//		sb.write_to(1);
 
 		meters::opens++;
 		sockfd=socket(AF_INET,SOCK_STREAM,0);
