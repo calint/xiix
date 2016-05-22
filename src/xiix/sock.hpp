@@ -9,74 +9,64 @@
 #include<unistd.h>
 #include<string.h>
 #include<cassert>
+#include<memory>
 namespace xiix{
 
 
 
 
 
-
-
-
-
-
 class span final{
-	char*p{nullptr};
-	size_t n;
+	const char*pt{nullptr};
+	size_t len{0};
 public:
-	inline span(const span&o){
-		p=o.p;
-		n=o.n;
-	}
-	inline span(const char*buffer,const size_t size):p{(char*)buffer},n{size}{}
-	inline const char*ptr()const{return p;}
-	inline size_t size_in_bytes()const{return n;}
-	inline const span subspan(const char*start,const size_t size_in_bytes)const{
+//	inline span(const span&o):p{o.p},n{o.n}{}
+	inline span&operator=(const span&o){pt=o.pt;len=o.len;return*this;}
+	inline span(const char*buffer,const size_t size):pt{buffer},len{size}{}
+	inline const char*ptr()const{return pt;}
+	inline size_t size_in_bytes()const{return len;}
+	inline span subspan(const char*start,const size_t size_in_bytes)const{
 //		printf(" %d     %d   \n",start>=p,(start+size_in_bytes)<(p+n));
-		assert(start>=p  and  (start+size_in_bytes)<(p+n));
+		assert(start>=pt  and  (start+size_in_bytes)<(pt+len));
 		span s=span(start,size_in_bytes);
 		return s;
 	}
 	inline span&write_to(int fd){
-		const ssize_t nn=write(fd,p,n);
+		const ssize_t nn=write(fd,pt,len);
 		if(nn<0)throw"write";
-		if((unsigned)nn!=n)throw"writeincomplete";
+		if((unsigned)nn!=len)throw"writeincomplete";
 		return*this;
 	}
-
-
-	//	inline span&operator=(const span&o){p=o.p;s=o.s;return*this;}
-
 };
 
 class buffic final{
-	span s;// span
+	span sp;// span
 	char*bb{nullptr};// begin of string
 	char*be{nullptr};// end of string + 1
 public:
-	inline buffic(const span&sp):s(sp){
+	inline buffic(const span&s):sp(s){
 		bb=be=(char*)s.ptr();
 	}
-	inline buffic&use(const span&sp){
-		s=sp;
-		bb=be=(char*)s.ptr();
+	inline buffic&use(const span&o){
+		sp=o;
+		bb=be=(char*)sp.ptr();
 		return*this;
 	}
 	inline buffic&reset(){
-		bb=be=(char*)s.ptr();
+		bb=be=(char*)sp.ptr();
 		return*this;
 	}
 	inline size_t string_size_in_bytes(){
 		return be-bb;
 	}
 	inline buffic&p(const char ch){
-		assert((be-s.ptr())<s.size_in_bytes());
+		assert((be-sp.ptr())<(signed)sp.size_in_bytes());
 		*be++=ch;
 		return*this;
 	}
 	inline buffic&p(const span&o){
 		const size_t sn=o.size_in_bytes();
-		assert((be-s.ptr()+sn)<s.size_in_bytes());
+		assert((be-sp.ptr()+sn)<sp.size_in_bytes());
 		memcpy(bb,o.ptr(),sn);
 		be+=sn;
 		return*this;
@@ -89,8 +79,8 @@ public:
 		return*this;
 	}
 	inline const span string_span(){//? const
-		const span sp=s.subspan((const char*)bb,string_size_in_bytes());
-		return sp;
+		const span o=sp.subspan((const char*)bb,string_size_in_bytes());
+		return o;
 	}
 };
 
@@ -101,9 +91,9 @@ class firstline final{
 	buffic b{span{buf,sizeof buf}};
 public:
 	inline firstline(){*buf='\0';}
-	inline const span&assert_protocol(){return std::move(span{buf,2});}
-	inline const span&get_result_code()const{return std::move(span{buf,2});}
-	inline const span&get_result_text()const{return std::move(span{buf,2});}
+	inline void assert_protocol(){}
+	inline span get_result_code()const{return span(buf,2);}
+	inline span get_result_text()const{return span(buf,2);}
 	inline void copy_from(const span&spn){b.p(spn);}
 };
 
@@ -116,9 +106,9 @@ public:
 		return get_header_value(key);
 	}
 	inline const char*get_header_value(const char*key){
-		return "close";
+		return"close";
 	}
-	inline void copy_from(const span&spn){
+	inline void append(const span&spn){
 		b.p(spn);
 	}
 };
@@ -171,8 +161,10 @@ public:
 //		b2.p('\0');
 //		b2.write_to(1);
 //
+		std::unique_ptr<char>bb(new char[32]);
+		span s(bb.get(),32);
 
-
+//		span s(std::unique_ptr<char*>((char*)malloc(32)),32)
 
 
 
