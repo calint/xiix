@@ -6,15 +6,15 @@ protected:
 	const char*pt{nullptr};
 	size_t len{0};
 public:
-	inline span(const span&o):pt{o.pt},len{o.len}{}
-	inline span&operator=(const span&o){pt=o.pt;len=o.len;return*this;}
-	inline span(const char*buffer,const size_t size):pt{buffer},len{size}{}
+	inline span(const char*buf,const size_t size):pt{buf},len{size}{}
+	inline span(const span&s):pt{s.pt},len{s.len}{}
+	inline span&operator=(const span&s){pt=s.pt;len=s.len;return*this;}
 	inline const char*ptr()const{return pt;}
 	inline size_t length()const{return len;}
 	inline bool is_empty()const{return len==0;}
-	inline span subspan(const char*start,const size_t size_in_bytes)const{
-		assert(start>=pt  and  (start+size_in_bytes)<(pt+len));
-		span s=span(start,size_in_bytes);
+	inline span subspan(const char*start,const size_t size)const{
+		assert(start>=pt  and  (start+size)<(pt+len));
+		span s=span(start,size);
 		return s;
 	}
 	inline span&write_to(int fd){

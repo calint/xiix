@@ -5,7 +5,7 @@ namespace xiix{class spanb:span{
 	char*bb{nullptr};// begin of string
 	char*be{nullptr};// cursor  >bb and <len
 public:
-	inline spanb(char*bytes,const size_t len):span{(const char*)bytes,len},bb{bytes},be{bytes}{}
+	inline spanb(char*buf,const size_t len):span{(const char*)buf,len},bb{buf},be{buf}{}
 	inline spanb&p(const char ch){
 		assert((be-pt)<(signed)len);
 		*be++=ch;
