@@ -8,7 +8,139 @@
 #include<errno.h>
 #include<unistd.h>
 #include<string.h>
-namespace xiix{class sock final{
+#include<cassert>
+namespace xiix{
+
+
+
+
+
+
+
+
+
+
+class span final{
+	char*p{nullptr};
+	size_t n;
+public:
+	inline span(const span&o){
+		p=o.p;
+		n=o.n;
+	}
+	inline span(const char*buffer,const size_t size):p{(char*)buffer},n{size}{}
+	inline const char*ptr()const{return p;}
+	inline size_t size_in_bytes()const{return n;}
+	inline const span subspan(const char*start,const size_t size_in_bytes)const{
+//		printf(" %d     %d   \n",start>=p,(start+size_in_bytes)<(p+n));
+		assert(start>=p  and  (start+size_in_bytes)<(p+n));
+		span s=span(start,size_in_bytes);
+		return s;
+	}
+	inline span&write_to(int fd){
+		const ssize_t nn=write(fd,p,n);
+		if(nn<0)throw"write";
+		if((unsigned)nn!=n)throw"writeincomplete";
+		return*this;
+	}
+
+
+	//	inline span&operator=(const span&o){p=o.p;s=o.s;return*this;}
+
+};
+
+class buffic final{
+	span s;// span
+	char*bb{nullptr};// begin of string
+	char*be{nullptr};// end of string + 1
+public:
+	inline buffic(const span&sp):s(sp){
+		bb=be=(char*)s.ptr();
+	}
+	inline buffic&use(const span&sp){
+		s=sp;
+		bb=be=(char*)s.ptr();
+		return*this;
+	}
+	inline buffic&reset(){
+		bb=be=(char*)s.ptr();
+		return*this;
+	}
+	inline size_t string_size_in_bytes(){
+		return be-bb;
+	}
+	inline buffic&p(const char ch){
+		assert((be-s.ptr())<s.size_in_bytes());
+		*be++=ch;
+		return*this;
+	}
+	inline buffic&p(const span&o){
+		const size_t sn=o.size_in_bytes();
+		assert((be-s.ptr()+sn)<s.size_in_bytes());
+		memcpy(bb,o.ptr(),sn);
+		be+=sn;
+		return*this;
+	}
+	inline buffic&write_to(int fd){
+		const ssize_t ln=be-bb;
+		const ssize_t n=write(fd,bb,ln);
+		if(n<0)throw"write";
+		if((unsigned)n!=ln)throw"writeincomplete";
+		return*this;
+	}
+	inline const span string_span(){//? const
+		const span sp=s.subspan((const char*)bb,string_size_in_bytes());
+		return sp;
+	}
+};
+
+enum class states{waiting_to_send_next_request,reading_firstline,reading_headers,reading_content_sized,read_content_chunked,reading_content_until_disconnect,uploading_cont,sending_content_cont};
+
+class firstline final{
+	char buf[4096];
+	buffic b{span{buf,sizeof buf}};
+public:
+	inline firstline(){*buf='\0';}
+	inline const span&assert_protocol(){return std::move(span{buf,2});}
+	inline const span&get_result_code()const{return std::move(span{buf,2});}
+	inline const span&get_result_text()const{return std::move(span{buf,2});}
+	inline void copy_from(const span&spn){b.p(spn);}
+};
+
+class headers final{
+	char buf[4096];
+	buffic b{span{buf,sizeof buf}};
+public:
+	inline headers(){*buf='\0';}
+	inline const char*operator[](const char*key){
+		return get_header_value(key);
+	}
+	inline const char*get_header_value(const char*key){
+		return "close";
+	}
+	inline void copy_from(const span&spn){
+		b.p(spn);
+	}
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class sock final{
 	int epollfd{0};
 	int sockfd{0};
 	const char*hostname{nullptr};
@@ -22,6 +154,28 @@ public:
 	inline sock&seturi(/*refs*/const char*s){uri=s;return*this;}
 	inline sock&setrepeatmode(const bool b){repeat_request_after_done=b;return*this;}
 	inline void connect(){
+//		char bb[5];
+//		span s(bb,sizeof bb);
+//		buffic b(s);
+//		b.p('a');
+//		b.p('b');
+//		b.p('c');
+//		b.write_to(1);
+////		span s2=s.subspan(s.ptr()+1,8);
+//		span s2=s.subspan(s.ptr()+1,2);
+//		s2.write_to(1);
+//
+//		char bb2[32];
+//		buffic b2(span(bb2,sizeof bb2));
+//		b2.p(b.string_span());
+//		b2.p('\0');
+//		b2.write_to(1);
+//
+
+
+
+
+
 		meters::opens++;
 		sockfd=socket(AF_INET,SOCK_STREAM,0);
 		if(sockfd<0)throw"socket";
@@ -380,8 +534,7 @@ private:
 					    char*errorptr;
 					    strbuf_copy_to(hex_str,sizeof(hex_str));
 					    chunk_size_in_bytes=strtoul(hex_str,&errorptr,16);
-						if(*errorptr)
-							throw"chunksizefromhex";
+						if(*errorptr)throw"chunksizefromhex";
 						chunk_pos_in_bytes=0;
 						if(chunk_size_in_bytes==0)
 							stc=state_chunked::delimiter_end;
@@ -427,13 +580,11 @@ private:
 					return;
 				}
 				continue;
-			}
-			if(stc==state_chunked::delimiter_end){
+			}else if(stc==state_chunked::delimiter_end){
 				while(bufi<bufnn){
 					const char ch=*bufp++;
 					bufi++;
 					if(ch=='\n'){// delimiter: "\r\n"
-
 						st=next_req;
 						if(st==next_req and !repeat_request_after_done)
 							throw"close";//? return or throw
@@ -498,30 +649,4 @@ private:
 		ev.events=EPOLLOUT|EPOLLET;
 		if(epoll_ctl(epollfd,EPOLL_CTL_MOD,sockfd,&ev))throw"epollmodwrite";
 	}
-//	inline static char*strtrm(char*p,char*e){
-//		while(p!=e&&isspace(*p))p++;
-//		while(p!=e&&isspace(*e))*e--=0;
-//		return p;
-//	}
-//	inline static char*strtrmleft(char*p,char*e){
-//		while(p!=e&&isspace(*p))p++;
-//		return p;
-//	}
-//	inline static char*strtrmright(char*p,char*e){
-//		while(p!=e){
-//			const char ch=*e;
-//			if(!ch){e--;continue;}
-//			if(!isspace(ch))break;
-//			*e=0;
-//			e--;
-//		}
-//		return e;
-//	}
-//	inline static void strlwr(char*p){
-//		while(*p){
-//			*p=(char)tolower(*p);
-//			p++;
-//		}
-//	}
-
 };}
