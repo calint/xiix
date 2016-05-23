@@ -87,10 +87,21 @@ private:
 	public:
 		inline void set_span(const span&s){sp=s;}
 		inline span operator[](const char*key)const{return get_header_value(key);}
+		inline void clr(){sp={nullptr,0};}
 		inline span get_header_value(const char*key)const{
 			const char*p=sp.ptr();
-
-			return span{"close",5};
+			while(true){
+				const char ch=*p;
+				if(ch=='\n')return span(nullptr,0);
+				const char*ky{p};
+				while(*p++!=':');//? unsafe
+				span keysp(ky,p-ky);
+				const char*value{p};
+				while(*p++!='\n');//? unsafe
+				if(keysp.string_equals(key)){
+					return span(value,p-value);
+				}
+			}
 		}
 	}header;
 
@@ -121,8 +132,8 @@ private:
 	static const size_t bufsize{4*1024};
 	class{
 		char b[bufsize+1];
-		char*e{nullptr};//position
-		char*eob{nullptr};//end of buffer
+		char*e{b};//position
+		char*eob{b};//end of buffer
 	public:
 		inline bool needs_read()const{return e==eob;}
 		inline void clr(){e=b;*b='\0';}
@@ -147,8 +158,7 @@ private:
 		stc=state_chunked::size;
 		header_start_ptr={nullptr};
 	}
-	inline void parse_buf(){loop(){
-		char prevch{0};
+	inline void parse_buf(){char prevch{0};loop(){
 		if(st==waiting_to_send_next_request){
 			if(is_first_request){
 				is_first_request=false;
@@ -176,6 +186,7 @@ private:
 					const span spn=buf.get_span();
 					request.set_span(spn);
 					header_start_ptr=buf.pos();
+					header.clr();
 					st=reading_headers;
 					break;
 				}
@@ -186,7 +197,7 @@ private:
 			while(!buf.needs_read()){
 				const char ch=buf.unsafe_next_char();
 				if(ch!='\n'){prevch=ch;continue;}
-				if(prevch!='\n')continue;else{prevch='\n';continue;}
+				if(prevch!='\n'){prevch=ch;continue;}
 				const span spn(header_start_ptr,buf.pos()-header_start_ptr-1);
 				header.set_span(spn);
 

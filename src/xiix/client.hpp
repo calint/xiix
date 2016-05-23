@@ -4,6 +4,7 @@
 #include"conf.hpp"
 #include"sock.hpp"
 #include"lst.hpp"
+#include<memory>
 namespace xiix{class client final{
 public:
 	inline client(const int argc,const char**argv,const char**env){
@@ -44,8 +45,13 @@ private:
 		const int epollfd=epoll_create(nsocks);
 		if(epollfd<0)throw"epoll_create";
 
+		using namespace std;
+//		lst<unique_ptr<sock>>socks;
 		lst<sock*>socks;
+//		for(auto&s:socks)s=new sock(epollfd,hostname,port);
+//		for(int i=0;i<nsocks;i++)socks.add(unique_ptr<sock>(new sock(epollfd,hostname,port)));
 		for(int i=0;i<nsocks;i++)socks.add(new sock(epollfd,hostname,port));
+//		socks.foreach2([repeatmode,uri](unique_ptr<sock>s){s->seturi(uri).setrepeatmode(repeatmode).connect();return true;});
 		socks.foreach2([repeatmode,uri](sock*s){s->seturi(uri).setrepeatmode(repeatmode).connect();return true;});
 		struct epoll_event*evs=(epoll_event*)calloc(nsocks,sizeof(struct epoll_event));
 		while(1){

@@ -23,4 +23,13 @@ public:
 		if((unsigned)nn!=len)throw"writeincomplete";
 		return*this;
 	}
+	inline bool string_equals(const char*s){
+		const char*p{pt};
+		const char*e{pt+len};
+		bool found{false};
+		while(true){
+			if(p==e)return true;
+			if(*s++!=*p--)return false;
+		}
+	}
 };}
