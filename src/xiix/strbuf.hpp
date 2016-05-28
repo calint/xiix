@@ -1,22 +1,19 @@
 #pragma once
-#include"defines.hpp"
+#include"ns.hpp"
 #include<string.h>
 namespace xiix{class strbuf{
 	char bb[strbuf_size];
-//	const size_t s{strbuf_size};
 	char*p{bb};
 	char*b{bb};
-	char*e{bb+strbuf_size};
+	const char*e{bb+strbuf_size};
 public:
 	inline void rst(){
 		p=b=bb;
-		e=bb+strbuf_size;
 		*p=0;
 	}
 	inline size_t len()const{return p-b;}
 	inline void append(const char&ch){
 		assert( p!=e );
-//		if((size_t)(p-bb)==strbuf_size)throw"overflow";
 		*p++=ch;
 	}
 	inline void copy_to(char*buf,size_t buflen){

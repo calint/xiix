@@ -1,11 +1,11 @@
 #pragma once
-#include"defines.hpp"
+#include"ns.hpp"
 #include"args.hpp"
-#include"meters.hpp"
-#include"conf.hpp"
 #include"sock.hpp"
 #include"lst.hpp"
 #include<memory>
+
+#include "ns.hpp"
 namespace xiix{class client final{
 public:
 	inline client(const int argc,const char**argv,const char**env){

@@ -1,8 +1,7 @@
 #pragma once
-#include"defines.hpp"
-#include"meters.hpp"
+#include"ns.hpp"
 #include"span.hpp"
-//#include"spanb.hpp"
+#include"strbuf.hpp"
 #include<string.h>
 #include<netdb.h>
 #include<fcntl.h>
@@ -11,8 +10,8 @@
 #include<unistd.h>
 #include<cassert>
 #include<stdlib.h>
+#include<stdio.h>
 
-#include "strbuf.hpp"
 namespace xiix{class sock final{
 public:
 	inline sock(const int epollfd,const char*hostname,const int port):epollfd{epollfd},hostname{hostname},port{port}{meters::socks++;}
@@ -50,8 +49,8 @@ public:
 			meters::reads++;
 //			if(!buf.needs_read())
 //				throw"incompleteparse";
-			buf.clr();
-			const size_t nn=io_recv((void*)buf.pos(),bufsize);
+			buf.rst();
+			const size_t nn=io_recv((void*)buf.pos(),sock_buf_size);
 			if(nn==0)throw"brk";
 			buf.set_len(nn);
 		}
@@ -85,24 +84,23 @@ private:
 		inline span get_result_text()const{return span(nullptr,0);}
 	}request;
 
-
 	class{
 		char b[4]{'\r','\n','\r','\n'};
-		int i;
+		int i{0};
 	public:
 		inline void rst(){i=0;}
-		inline bool put(const char c){
+		inline bool read(const char c){
 			if(b[i]==c)i++;else i=0;
 			return i==sizeof b;
 		}
-	}matcher;
+	}end_of_header_matcher;
 
 	class{
 		span sp{nullptr,0};
 	public:
 		inline void set_span(const span&s){sp=s;}
 		inline span operator[](const char*key){return get_header_value(key);}
-		inline void clr(){sp={nullptr,0};}
+		inline void rst(){sp={nullptr,0};}
 		inline span get_header_value(const char*key){
 			const char*p=sp.ptr();
 			while(true){
@@ -125,44 +123,48 @@ private:
 		size_t pos{0};
 	public:
 		inline void init_for_recieve(const size_t nbytes){pos=0;len=nbytes;}
-		inline void clr(){len=pos=0;}
+		inline void rst(){len=pos=0;}
 		inline size_t rem()const{return len-pos;}
 		inline size_t length()const{return len;}
 		inline bool needs_read()const{return pos!=len;}
 		inline void unsafe_pos_inc(const size_t nbytes){pos+=nbytes;}
-	}content,chunk;
+	}content_range,chunk_range;
 
-	static const size_t bufsize{sock_buf_size};
+//	static const size_t bufsize{sock_buf_size};
+
 	class{
-		char b[bufsize+1];
+		char b[sock_buf_size+1];//
 		char*e{b};//position
-		char*eob{b};//end of buffer
+		char*eob{b+sock_buf_size};//end of buffer
 	public:
 		inline bool needs_read()const{return e==eob;}
-		inline void clr(){e=b;*b='\0';}
+		inline void rst(){e=b;*b='\0';}
 		inline size_t rem()const{return eob-e;}
 		inline void set_len(const size_t len){eob=b+len;*eob='\0';}
 		inline const char*pos()const{return e;}
 		inline char unsafe_next_char(){return *e++;}
 		inline void unsafe_pos_inc(const size_t nbytes){e+=nbytes;}
-		inline span get_span()const{return span(b,e-b-1);}
-
+		inline span to_span()const{return span(b,e-b-1);}
 	}buf;
 
 	const char*header_start_ptr{nullptr};
-	strbuf sb;
+	strbuf sb_chunk_size;
 
 	inline void clear_for_next_request(){
-		content.clr();
-		chunk.clr();
-		sb.rst();
-		if(!buf.needs_read())throw"bufp!=bufe";
-		buf.clr();
-		stc=state_chunked::size;
-		header_start_ptr={nullptr};
-		matcher.rst();
+//		content_range.rst();
+//		chunk_range.rst();
+//		sb_chunk_size.rst();
+
+//		if(!buf.needs_read())throw"bufp!=bufe";
+//		buf.rst();
+
+//		stc=state_chunked::size;
+//
+//		header.rst();
+//		header_start_ptr={nullptr};
+//		end_of_header_matcher.rst();
 	}
-	inline void parse_buf(){char prevch{0};loop(){
+	inline void parse_buf(){loop(){
 		if(st==waiting_to_send_next_request){
 			if(is_first_request){
 				is_first_request=false;
@@ -187,12 +189,16 @@ private:
 			while(!buf.needs_read()){
 				const char ch=buf.unsafe_next_char();
 				if(ch=='\n'){
-					const span spn=buf.get_span();
+					const span spn=buf.to_span();
 					request.set_span(spn);
 					header_start_ptr=buf.pos();
-					header.clr();
-					matcher.rst();
+					header.rst();
+					end_of_header_matcher.rst();
+
 					st=reading_headers;
+					header.rst();
+					header_start_ptr=buf.pos();
+					end_of_header_matcher.rst();
 					break;
 				}
 			}
@@ -201,23 +207,21 @@ private:
 		if(st==reading_headers){
 			while(!buf.needs_read()){
 				const char ch=buf.unsafe_next_char();
-				if(!matcher.put(ch))
+				if(!end_of_header_matcher.read(ch))
 					continue;
 				const span spn(header_start_ptr,buf.pos()-header_start_ptr-1);
 				header.set_span(spn);
 				span s=header["Content-Length"];
 				if(!s.is_empty()){
-					content.init_for_recieve(atoi(s.ptr()));
-					const size_t rem=buf.rem();
-					const size_t read_size=content.length()<=rem?content.length():rem;
-					if(read_size>0){
-//						if(conf::print_content)
-//							write(1,buf.pos(),read_size);
-						on_content(buf.pos(),read_size,content.length());
-						buf.unsafe_pos_inc(read_size);
-						content.unsafe_pos_inc(read_size);
+					content_range.init_for_recieve(atoi(s.ptr()));
+					const size_t brem=buf.rem();
+					const size_t len=content_range.length()<=brem?content_range.length():brem;
+					if(len>0){
+						on_content(buf.pos(),len,content_range.length());
+						buf.unsafe_pos_inc(len);
+						content_range.unsafe_pos_inc(len);
 					}
-					if(content.needs_read()){
+					if(content_range.needs_read()){
 						st=reading_content_sized;
 						io_request_read();
 						return;
@@ -235,16 +239,14 @@ private:
 				if(s.unsafe__starts_with_str("chunked")){
 					st=reading_content_chunked;
 					stc=state_chunked::size;
-					sb.rst();
+					sb_chunk_size.rst();
 					break;
 				}
 				s=header["Connection"].subspan_trim_left();
 				if(s.unsafe__starts_with_str("close")){
-					const size_t rem=buf.rem();
-//					if(conf::print_content)
-//						write(1,buf.pos(),rem);
-					on_content(buf.pos(),rem,0);//? 0
-					buf.unsafe_pos_inc(rem);
+					const size_t brem=buf.rem();
+					on_content(buf.pos(),brem,0);//? 0
+					buf.unsafe_pos_inc(brem);
 					st=reading_content_until_disconnect;
 					break;
 				}
@@ -254,15 +256,13 @@ private:
 			if(buf.needs_read()){io_request_read();return;}
 		}
 		if(st==reading_content_sized){
-			const size_t crem=content.rem();
+			const size_t crem=content_range.rem();
 			const size_t brem=buf.rem();
 			const size_t len=crem>brem?brem:crem;
-//			if(conf::print_content)
-//				write(1,buf.pos(),len);
-			on_content(buf.pos(),len,content.length());
-			content.unsafe_pos_inc(len);
+			on_content(buf.pos(),len,content_range.length());
+			content_range.unsafe_pos_inc(len);
 			buf.unsafe_pos_inc(len);
-			if(!content.needs_read()){
+			if(!content_range.needs_read()){
 				st=waiting_to_send_next_request;
 				if(st==waiting_to_send_next_request and !repeat_request_after_done)
 					throw"close";
@@ -273,17 +273,17 @@ private:
 			if(stc==state_chunked::size){
 				while(!buf.needs_read()){
 					const char ch=buf.unsafe_next_char();
-					sb.append(ch);
+					sb_chunk_size.append(ch);
 					if(ch=='\n'){// chunk header e.g. "f07\r\n"
-						sb.backspace('\0');
-						sb.trimright();
-						sb.append('\0');
+						sb_chunk_size.backspace('\0');
+						sb_chunk_size.trimright();
+						sb_chunk_size.append('\0');
 						char hex_str[32];
 						char*errorptr;
-						sb.copy_to(hex_str,sizeof(hex_str));
+						sb_chunk_size.copy_to(hex_str,sizeof(hex_str));
 						const size_t chunklen=strtoul(hex_str,&errorptr,16);
 						if(*errorptr)throw"chunksizefromhex";
-						chunk.init_for_recieve(chunklen);
+						chunk_range.init_for_recieve(chunklen);
 						if(chunklen==0)
 							stc=state_chunked::delimiter_end;
 						else
@@ -295,14 +295,12 @@ private:
 			}
 			if(stc==state_chunked::data){
 				const size_t brem=buf.rem();
-				const size_t crem=chunk.rem();
+				const size_t crem=chunk_range.rem();
 				const size_t len=crem<=brem?crem:brem;
-//				if(conf::print_content)
-//					write(1,buf.pos(),read_size);
-				on_content(buf.pos(),len,chunk.length());
+				on_content(buf.pos(),len,chunk_range.length());
 				buf.unsafe_pos_inc(len);
-				chunk.unsafe_pos_inc(len);
-				if(chunk.needs_read()){
+				chunk_range.unsafe_pos_inc(len);
+				if(chunk_range.needs_read()){
 					if(buf.needs_read()){io_request_read();return;}
 					throw"illegalstate";
 				}
@@ -312,8 +310,8 @@ private:
 				while(!buf.needs_read()){
 					const char ch=buf.unsafe_next_char();
 					if(ch=='\n'){// delimiter: "\r\n"
-						sb.rst();
 						stc=state_chunked::size;
+						sb_chunk_size.rst();
 						break;
 					}
 				}
@@ -333,11 +331,9 @@ private:
 				continue;
 			}
 		}else if(st==reading_content_until_disconnect){
-			const size_t rem=buf.rem();
-//			if(conf::print_content)
-//				write(1,buf.pos(),rem);
-			on_content(buf.pos(),rem,0);//? maxsizet
-			buf.unsafe_pos_inc(rem);
+			const size_t brem=buf.rem();
+			on_content(buf.pos(),brem,0);//? maxsizet
+			buf.unsafe_pos_inc(brem);
 			io_request_read();
 			return;
 		}
