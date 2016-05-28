@@ -46,8 +46,8 @@ public:
 	inline void on_epoll_event(struct epoll_event&ev){
 		if(ev.events&EPOLLIN){
 			meters::reads++;
-			if(!buf.needs_read())
-				throw"incompleteparse";
+//			if(!buf.needs_read())
+//				throw"incompleteparse";
 			buf.clr();
 			const size_t nn=io_recv((void*)buf.pos(),bufsize);
 			if(nn==0)throw"brk";
@@ -234,7 +234,7 @@ private:
 					st=waiting_to_send_next_request;
 					if(st==waiting_to_send_next_request and !repeat_request_after_done)
 						throw"close";//? return or throw
-					continue;
+					break;
 				}else{
 					span t=header["Transfer-Encoding"];
 					if(t.unsafe__starts_with_str("chunked")){
@@ -258,6 +258,7 @@ private:
 					}
 				}
 			}
+			if(st==waiting_to_send_next_request)continue;
 			if(buf.needs_read()){io_request_read();return;}
 		}
 		if(st==reading_content_sized){
