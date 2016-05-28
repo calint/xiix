@@ -17,6 +17,16 @@ public:
 		span s=span(start,size);
 		return s;
 	}
+	inline span subspan_trim_left()const{
+		const char*p{pt};
+		const char*pe{pt+len};
+		while(true){
+			if(p==pe)break;
+			if(!isspace(*p))break;
+			p++;
+		}
+		return span(p,pe-p);
+	}
 	inline span&write_to(int fd){
 		const ssize_t nn=write(fd,pt,len);
 		if(nn<0)throw"write";
@@ -25,8 +35,10 @@ public:
 	}
 	inline bool unsafe__starts_with_str(const char*s){
 		const char*p{pt};
+		const char*pe{pt+len};
 		while(true){
 			if(!*s)return true;
+			if(p==pe)return false;
 			if(*s!=*p)return false;
 			s++;
 			p++;

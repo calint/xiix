@@ -33,9 +33,9 @@ public:
 		sa.sin_port=htons(port);
 		if(::connect(sockfd,(struct sockaddr*)&sa,sizeof sa)<0)throw"connect";
 
-	    int flag=fcntl(sockfd,F_GETFL,0);
-	    if(flag<0)throw"getfl";
-	    if(fcntl(sockfd,F_SETFL,flag|O_NONBLOCK)==-1)throw"nonblock";
+		int flag=fcntl(sockfd,F_GETFL,0);
+		if(flag<0)throw"getfl";
+		if(fcntl(sockfd,F_SETFL,flag|O_NONBLOCK)==-1)throw"nonblock";
 
 		memset(&ev,0,sizeof(struct epoll_event));
 		ev.events=EPOLLOUT|EPOLLET;
@@ -217,15 +217,14 @@ private:
 					continue;
 				const span spn(header_start_ptr,buf.pos()-header_start_ptr-1);
 				header.set_span(spn);
-
 				span s=header["Content-Length"];
-				if(s.length()>0){
+				if(!s.is_empty()){
 					content.init_for_recieve(atoi(s.ptr()));
 					const size_t rem=buf.rem();
 					const size_t read_size=content.length()<=rem?content.length():rem;
 					if(read_size>0){
-						if(conf::print_content)
-							write(1,buf.pos(),read_size);
+//						if(conf::print_content)
+//							write(1,buf.pos(),read_size);
 						on_content(buf.pos(),read_size,content.length());
 						buf.unsafe_pos_inc(read_size);
 						content.unsafe_pos_inc(read_size);
@@ -237,45 +236,44 @@ private:
 					}
 					st=waiting_to_send_next_request;
 					if(st==waiting_to_send_next_request and !repeat_request_after_done)
-						throw"close";//? return or throw
-					break;
-				}else{
-					span t=header["Transfer-Encoding"];
-					while(isspace(*t.ptr()))//? subspan_trim()
-						t=t.subspan(t.ptr()+1,t.length()-1);
-					if(t.unsafe__starts_with_str("chunked")){
-//					if(!t.is_empty() and !strncmp(t.ptr(),"chunked",sizeof "chunked")){
-						st=reading_content_chunked;
-						stc=state_chunked::size;
-						sb.rst();
-						break;
+						throw"close";
 
-					}else{
-						span s=header["Connection"];
-						if(!s.is_empty() and !strcmp("close",s.ptr())){
-							const size_t rem=buf.rem();
-							if(conf::print_content)
-								write(1,buf.pos(),rem);
-							on_content(buf.pos(),rem,0);//? 0
-							buf.unsafe_pos_inc(rem);
-							st=reading_content_until_disconnect;
-						}else
-							throw"unknowntransfertype";
-					}
+					s=header["Connection"].subspan_trim_left();
+					if(s.unsafe__starts_with_str("close"))
+						throw"close";
+					break;
 				}
+				s=header["Transfer-Encoding"].subspan_trim_left();
+				if(s.unsafe__starts_with_str("chunked")){
+					st=reading_content_chunked;
+					stc=state_chunked::size;
+					sb.rst();
+					break;
+				}
+				s=header["Connection"].subspan_trim_left();
+				if(s.unsafe__starts_with_str("close")){
+					const size_t rem=buf.rem();
+//					if(conf::print_content)
+//						write(1,buf.pos(),rem);
+					on_content(buf.pos(),rem,0);//? 0
+					buf.unsafe_pos_inc(rem);
+					st=reading_content_until_disconnect;
+					break;
+				}
+				throw"unknowntransfertype";
 			}
 			if(st==waiting_to_send_next_request)continue;
 			if(buf.needs_read()){io_request_read();return;}
 		}
 		if(st==reading_content_sized){
-			const size_t rem=content.rem();
-			const size_t read_in_buffer=buf.rem();
-			const size_t read_size=rem>read_in_buffer?read_in_buffer:rem;
-			if(conf::print_content)
-				write(1,buf.pos(),read_size);
-			on_content(buf.pos(),read_size,content.length());
-			content.unsafe_pos_inc(read_size);
-			buf.unsafe_pos_inc(read_size);
+			const size_t crem=content.rem();
+			const size_t brem=buf.rem();
+			const size_t len=crem>brem?brem:crem;
+//			if(conf::print_content)
+//				write(1,buf.pos(),len);
+			on_content(buf.pos(),len,content.length());
+			content.unsafe_pos_inc(len);
+			buf.unsafe_pos_inc(len);
 			if(!content.needs_read()){
 				st=waiting_to_send_next_request;
 				if(st==waiting_to_send_next_request and !repeat_request_after_done)
@@ -292,30 +290,30 @@ private:
 						sb.backspace('\0');
 						sb.trimright();
 						sb.append('\0');
-					    char hex_str[32];
-					    char*errorptr;
-					    sb.copy_to(hex_str,sizeof(hex_str));
-					    const size_t chunklen=strtoul(hex_str,&errorptr,16);
+						char hex_str[32];
+						char*errorptr;
+						sb.copy_to(hex_str,sizeof(hex_str));
+						const size_t chunklen=strtoul(hex_str,&errorptr,16);
 						if(*errorptr)throw"chunksizefromhex";
-					    chunk.init_for_receive(chunklen);
+						chunk.init_for_receive(chunklen);
 						if(chunklen==0)
 							stc=state_chunked::delimiter_end;
 						else
 							stc=state_chunked::data;
-					    break;
+						break;
 					}
 				}
 				if(buf.needs_read()){io_request_read();return;}
 			}
 			if(stc==state_chunked::data){
-				const size_t rem_buf=buf.rem();
-				const size_t rem_chunk=chunk.rem();
-				const size_t read_size=rem_chunk<=rem_buf?rem_chunk:rem_buf;
-				if(conf::print_content)
-					write(1,buf.pos(),read_size);
-				on_content(buf.pos(),read_size,chunk.length());
-				buf.unsafe_pos_inc(read_size);
-				chunk.unsafe_pos_inc(read_size);
+				const size_t brem=buf.rem();
+				const size_t crem=chunk.rem();
+				const size_t len=crem<=brem?crem:brem;
+//				if(conf::print_content)
+//					write(1,buf.pos(),read_size);
+				on_content(buf.pos(),len,chunk.length());
+				buf.unsafe_pos_inc(len);
+				chunk.unsafe_pos_inc(len);
 				if(chunk.needs_read()){
 					if(buf.needs_read()){io_request_read();return;}
 					throw"illegalstate";
@@ -328,7 +326,7 @@ private:
 					if(ch=='\n'){// delimiter: "\r\n"
 						sb.rst();
 						stc=state_chunked::size;
-					    break;
+						break;
 					}
 				}
 				if(buf.needs_read()){io_request_read();return;}
@@ -348,16 +346,18 @@ private:
 			}
 		}else if(st==reading_content_until_disconnect){
 			const size_t rem=buf.rem();
-			if(conf::print_content)
-				write(1,buf.pos(),rem);
+//			if(conf::print_content)
+//				write(1,buf.pos(),rem);
 			on_content(buf.pos(),rem,0);//? maxsizet
 			buf.unsafe_pos_inc(rem);
 			io_request_read();
 			return;
 		}
 	}}
-	inline void on_content(/*scan*/const char*buf,size_t buflen,size_t totallen){
+	inline void on_content(/*scan*/const char*buf,size_t buflen,size_t contentlen){
 //		printf("*** %zu  %zu   %s\n",buflen,totallen,buf);
+		if(conf::print_content)
+			write(1,buf,buflen);
 	}
 	inline size_t io_send(const void*buf,size_t len,bool throw_if_send_not_complete=false){
 		const ssize_t c=send(sockfd,buf,len,MSG_NOSIGNAL);
