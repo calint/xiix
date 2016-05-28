@@ -1,4 +1,5 @@
 #pragma once
+#include"defines.hpp"
 #include"args.hpp"
 #include"meters.hpp"
 #include"conf.hpp"
@@ -23,10 +24,10 @@ private:
 			fprintf(stderr,"usage: %s [host=localhost] [port=8088] [uri=/] [connections=1] -psqv\n",argv[0]);
 			return 0;
 		}
-		const char*hostname=ag.getarg(1,"localhost");
-		const int port=atoi(ag.getarg(2,"80"));
-		const char*uri=ag.getarg(3,"/");
-		const int nsocks=atoi(ag.getarg(4,"1"));
+		const char*hostname=ag.getarg(1,default_host);
+		const int port=atoi(ag.getarg(2,default_port));
+		const char*uri=ag.getarg(3,default_path);
+		const int nsocks=atoi(ag.getarg(4,default_nclients));
 		conf::print_traffic=ag.hasoption('p');
 		conf::print_stats=ag.hasoption('s');
 		if(ag.hasoption('q'))conf::print_content=false;

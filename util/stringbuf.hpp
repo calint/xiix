@@ -1,5 +1,5 @@
 #pragma once
-namespace xiix{class stringbuf{
+namespace xiix{class strbuf{
 	char bb[256];
 	const size_t s{sizeof(bb)};
 	char*p{bb};

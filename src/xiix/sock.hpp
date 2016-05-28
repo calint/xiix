@@ -1,8 +1,8 @@
 #pragma once
+#include"defines.hpp"
 #include"meters.hpp"
 #include"span.hpp"
-#include"spanb.hpp"
-#include"stringbuf.hpp"
+//#include"spanb.hpp"
 #include<string.h>
 #include<netdb.h>
 #include<fcntl.h>
@@ -11,6 +11,8 @@
 #include<unistd.h>
 #include<cassert>
 #include<stdlib.h>
+
+#include "strbuf.hpp"
 namespace xiix{class sock final{
 public:
 	inline sock(const int epollfd,const char*hostname,const int port):epollfd{epollfd},hostname{hostname},port{port}{meters::socks++;}
@@ -67,6 +69,7 @@ private:
 
 	enum state{waiting_to_send_next_request,reading_firstline,reading_headers,reading_content_sized,reading_content_chunked,reading_content_until_disconnect,uploading,sending_content};
 	state st{waiting_to_send_next_request};
+
 	enum state_chunked{size,data,delimiter,delimiter_end};
 	state_chunked stc{size};
 
@@ -103,19 +106,16 @@ private:
 		inline span get_header_value(const char*key){
 			const char*p=sp.ptr();
 			while(true){
-				const char ch=*p;
 				const size_t pos=p-sp.ptr();
 				if(pos>=sp.length())
 					return span(nullptr,0);
-//				if(ch=='\n')return span(nullptr,0);
 				const char*ky{p};
 				while(*p++!=':');//? unsafe
 				span keysp(ky,p-ky);
 				const char*value{p};
 				while(*p++!='\n');//? unsafe
-				if(keysp.unsafe__starts_with_str(key)){
+				if(keysp.unsafe__starts_with_str(key))
 					return span(value,p-value);
-				}
 			}
 		}
 	}header;
@@ -130,21 +130,9 @@ private:
 		inline size_t length()const{return len;}
 		inline bool needs_read()const{return pos!=len;}
 		inline void unsafe_pos_inc(const size_t nbytes){pos+=nbytes;}
-	}content;
+	}content,chunk;
 
-	class{
-		size_t len{0};
-		size_t pos{0};
-	public:
-		inline void init_for_receive(const size_t chunksize){len=chunksize;pos=0;}
-		inline void clr(){len=pos=0;}
-		inline size_t rem()const{return len-pos;}
-		inline size_t length()const{return len;}
-		inline bool needs_read()const{return pos!=len;}
-		inline void unsafe_pos_inc(const size_t nbytes){pos+=nbytes;}
-	}chunk;
-
-	static const size_t bufsize{4*1024};
+	static const size_t bufsize{sock_buf_size};
 	class{
 		char b[bufsize+1];
 		char*e{b};//position
@@ -162,7 +150,7 @@ private:
 	}buf;
 
 	const char*header_start_ptr{nullptr};
-	stringbuf sb;
+	strbuf sb;
 
 	inline void clear_for_next_request(){
 		content.clr();
@@ -295,7 +283,7 @@ private:
 						sb.copy_to(hex_str,sizeof(hex_str));
 						const size_t chunklen=strtoul(hex_str,&errorptr,16);
 						if(*errorptr)throw"chunksizefromhex";
-						chunk.init_for_receive(chunklen);
+						chunk.init_for_recieve(chunklen);
 						if(chunklen==0)
 							stc=state_chunked::delimiter_end;
 						else
