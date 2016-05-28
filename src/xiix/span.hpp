@@ -5,7 +5,6 @@ namespace xiix{class span{
 protected:
 	const char*bgn{nullptr};
 	const char*end{nullptr};
-//	size_t ln{0};
 public:
 	inline span(){}
 	inline span(const char*buf,const size_t sizeofbuf):bgn{buf},end{buf+sizeofbuf}{}

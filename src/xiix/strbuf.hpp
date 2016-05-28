@@ -3,27 +3,27 @@
 #include<string.h>
 namespace xiix{class strbuf{
 	char bb[strbuf_size];
-	char*p{bb};
 	char*b{bb};
-	const char*e{bb+strbuf_size};
+	char*e{bb};
+	const char*end{bb+strbuf_size};
 public:
-	inline void rst(){p=b=bb;*p=0;}
-	inline size_t len()const{return p-b;}
-	inline void append(const char&ch){assert(p!=e);*p++=ch;}
+	inline void rst(){e=b=bb;*e=0;}
+	inline size_t len()const{return e-b;}
+	inline void append(const char&ch){assert(e!=end);*e++=ch;}
 	inline void copy_to(char*buf,size_t sizeof_buf){
-		const size_t len=p-b;
-		const size_t ln=len>sizeof_buf?sizeof_buf:ln;
+		const size_t len=e-b;
+		const size_t ln=len>sizeof_buf?sizeof_buf:len;
 		strncpy(buf,b,ln);
 	}
 	inline void trimright(){
-		while(p!=b){
-			const char ch=*(p-1);
+		while(e!=b){
+			const char ch=*(e-1);
 			if(!isspace(ch))break;
-			*--p='\0';
+			*--e='\0';
 		}
 	}
 	inline void trimleft(){
-		while(b!=e){
+		while(b!=end){
 			const char ch=*b;
 			if(isspace(ch)){b++;continue;}
 			break;
@@ -31,12 +31,12 @@ public:
 	}
 	inline void tolowercase(){
 		char*p=b;
-		while(p!=e){
+		while(p!=end){
 			const char ch=*p;
 			const char chl=tolower(ch);
 			*p=chl;
 			p++;
 		}
 	}
-	inline void backspace(const char replacement_char){assert(p!=b);p--;*p=replacement_char;}
+	inline void backspace(const char replacement_char){assert(e!=b);e--;*e=replacement_char;}
 };}
