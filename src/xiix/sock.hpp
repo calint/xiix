@@ -49,7 +49,7 @@ public:
 			meters::reads++;
 			buf.rst();
 			const size_t nn=io_recv((void*)buf.pos(),sock_buf_size);
-			if(nn==0)throw signal_connection_closed_by_server;
+			if(nn==0)throw signal_connreset;
 			buf.set_len(nn);
 		}
 		parse_buf();
@@ -101,9 +101,9 @@ private:
 		inline void rst(){sp={};}
 		inline span get_header_value(const char*key){
 			const char*p=sp.begin();
-			const char*spend=sp.end();
+			const char*end=sp.end();
 			while(true){
-				if(p==spend)return span{};
+				if(p==end)return span{};
 				const char*start_of_key{p};
 				while(*p++!=':');//? unsafe
 				span keysp(start_of_key,p);
@@ -155,7 +155,6 @@ private:
 					return;
 				}
 			}
-//			clear_for_next_request();
 			meters::requests++;
 			char s[1024];
 			const size_t n=(port!=80)?
@@ -205,11 +204,11 @@ private:
 					}
 					st=waiting_to_send_next_request;
 					if(st==waiting_to_send_next_request and !repeat_request_after_done)
-						throw"close";
+						throw signal_close;
 
 					s=header["Connection"].trimleft();
 					if(s.startswithstr("close"))
-						throw"close";
+						throw signal_close;
 					break;
 				}
 				s=header["Transfer-Encoding"].trimleft();
@@ -242,7 +241,7 @@ private:
 			if(!content_range.needs_read()){
 				st=waiting_to_send_next_request;
 				if(st==waiting_to_send_next_request and !repeat_request_after_done)
-					throw"close";
+					throw signal_close;
 				continue;
 			}
 			if(buf.needs_read()){io_request_read();return;}
@@ -300,7 +299,7 @@ private:
 					if(ch=='\n'){// delimiter: "\r\n"
 						st=waiting_to_send_next_request;
 						if(st==waiting_to_send_next_request and !repeat_request_after_done)
-							throw"close";
+							throw signal_close;
 						break;
 					}
 				}
@@ -321,7 +320,7 @@ private:
 	inline size_t io_send(const void*buf,size_t len,bool throw_if_send_not_complete=false){
 		const ssize_t c=send(sockfd,buf,len,MSG_NOSIGNAL);
 		if(c<0){
-			if(errno==EPIPE||errno==ECONNRESET)throw signal_connection_closed_by_server;
+			if(errno==EPIPE||errno==ECONNRESET)throw signal_connreset;
 			throw"send";
 		}
 		meters::output+=c;
@@ -336,7 +335,7 @@ private:
 			if(errno==EAGAIN||errno==EWOULDBLOCK){
 				io_request_read();
 			}else if(errno==ECONNRESET){
-				throw signal_connection_closed_by_server;
+				throw signal_connreset;
 			}
 			throw"recverr";
 		}
