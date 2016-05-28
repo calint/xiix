@@ -47,8 +47,6 @@ public:
 	inline void on_epoll_event(struct epoll_event&ev){
 		if(ev.events&EPOLLIN){
 			meters::reads++;
-//			if(!buf.needs_read())
-//				throw"incompleteparse";
 			buf.rst();
 			const size_t nn=io_recv((void*)buf.pos(),sock_buf_size);
 			if(nn==0)throw signal_connection_closed_by_server;
@@ -76,7 +74,7 @@ private:
 	bool is_first_request{true};
 
 	class{
-		span sp{nullptr,nullptr};
+		span sp;
 	public:
 		inline void set_span(const span&s){sp=s;}
 		inline bool assert_protocol(){return false;}
@@ -96,16 +94,19 @@ private:
 	}end_of_header_matcher;
 
 	class{
-		span sp{nullptr,nullptr};
+		span sp;
 	public:
 		inline void set_span(const span&s){sp=s;}
 		inline span operator[](const char*key){return get_header_value(key);}
-		inline void rst(){sp={nullptr,nullptr};}
+		inline void rst(){sp={};}
 		inline span get_header_value(const char*key){
-			const char*p=sp.ptr();
+			const char*p=sp.begin();
+			const char*spend=sp.end();
 			while(true){
-				const size_t pos=p-sp.ptr();
-				if(pos>=sp.len())return span{};
+				if(p==spend)return span{};
+//				const size_t pos=p-sp.begin();
+//				if(pos>=sp.len())
+//					return span{};
 				const char*start_of_key{p};
 				while(*p++!=':');//? unsafe
 				span keysp(start_of_key,p);
@@ -129,8 +130,6 @@ private:
 		inline void unsafe_pos_inc(const size_t nbytes){pos+=nbytes;}
 	}content_range,chunk_range;
 
-//	static const size_t bufsize{sock_buf_size};
-
 	class{
 		char b[sock_buf_size+1];//
 		char*e{b};//position
@@ -149,20 +148,6 @@ private:
 	const char*header_start_ptr{nullptr};
 	strbuf sb_chunk_size;
 
-//	inline void clear_for_next_request(){
-//		content_range.rst();
-//		chunk_range.rst();
-//		sb_chunk_size.rst();
-
-//		if(!buf.needs_read())throw"bufp!=bufe";
-//		buf.rst();
-
-//		stc=state_chunked::size;
-//
-//		header.rst();
-//		header_start_ptr={nullptr};
-//		end_of_header_matcher.rst();
-//	}
 	inline void parse_buf(){loop(){
 		if(st==waiting_to_send_next_request){
 			if(is_first_request){
@@ -208,11 +193,11 @@ private:
 				const char ch=buf.unsafe_next_char();
 				if(!end_of_header_matcher.read(ch))
 					continue;
-				const span spn(header_start_ptr,buf.pos()-1);
+				const span spn(header_start_ptr,buf.pos()-2);
 				header.set_span(spn);
 				span s=header["Content-Length"];
 				if(!s.isempty()){
-					content_range.init_for_recieve(atoi(s.ptr()));
+					content_range.init_for_recieve(atoi(s.begin()));
 					const size_t brem=buf.rem();
 					const size_t len=content_range.length()<=brem?content_range.length():brem;
 					if(len>0){
@@ -338,7 +323,6 @@ private:
 		}
 	}}
 	inline void on_content(/*scan*/const char*buf,size_t buflen,size_t contentlen){
-//		printf("*** %zu  %zu   %s\n",buflen,totallen,buf);
 		if(conf::print_content)write(1,buf,buflen);
 	}
 	inline size_t io_send(const void*buf,size_t len,bool throw_if_send_not_complete=false){

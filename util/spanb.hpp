@@ -7,20 +7,20 @@ namespace xiix{class spanb:span{
 public:
 	inline spanb(char*buf,const size_t len):span{(const char*)buf,len},bb{buf},be{buf}{}
 	inline spanb&p(const char ch){
-		assert((be-bgn)<(signed)len);
+		assert((be-b)<(signed)len);
 		*be++=ch;
 		return*this;
 	}
 	inline spanb&p(const span&s){
 		const size_t sn=s.len();
-		assert((be-bgn+sn)<len);
-		memcpy(bb,s.ptr(),sn);
+		assert((be-b+sn)<len);
+		memcpy(bb,s.begin(),sn);
 		be+=sn;
 		return*this;
 	}
 	inline spanb&p(const char*str){
 		const size_t ln=strlen(str);
-		assert(len-(be-bgn)-ln);
+		assert(len-(be-b)-ln);
 		strncpy(be,str,ln);
 		be+=ln;
 		return*this;
