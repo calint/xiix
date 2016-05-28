@@ -13,7 +13,7 @@ public:
 	inline size_t length()const{return len;}
 	inline bool is_empty()const{return len==0;}
 	inline span subspan(const char*start,const size_t size)const{
-		assert(start>=pt  and  (start+size)<(pt+len));
+		assert(start>=pt  and  (start+size)<=(pt+len));
 		span s=span(start,size);
 		return s;
 	}
@@ -25,7 +25,6 @@ public:
 	}
 	inline bool unsafe__starts_with_str(const char*s){
 		const char*p{pt};
-		bool found{false};
 		while(true){
 			if(!*s)return true;
 			if(*s!=*p)return false;

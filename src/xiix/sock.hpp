@@ -82,17 +82,32 @@ private:
 		inline span get_result_text()const{return span(nullptr,0);}
 	}request;
 
+
+	class{
+		char b[4]{'\r','\n','\r','\n'};
+		int i;
+	public:
+		inline void rst(){i=0;}
+		inline bool put(const char c){
+			if(b[i]==c)i++;else i=0;
+			return i==sizeof b;
+		}
+	}matcher;
+
 	class{
 		span sp{nullptr,0};
 	public:
 		inline void set_span(const span&s){sp=s;}
-		inline span operator[](const char*key)const{return get_header_value(key);}
+		inline span operator[](const char*key){return get_header_value(key);}
 		inline void clr(){sp={nullptr,0};}
-		inline span get_header_value(const char*key)const{
+		inline span get_header_value(const char*key){
 			const char*p=sp.ptr();
 			while(true){
 				const char ch=*p;
-				if(ch=='\n')return span(nullptr,0);
+				const size_t pos=p-sp.ptr();
+				if(pos>=sp.length())
+					return span(nullptr,0);
+//				if(ch=='\n')return span(nullptr,0);
 				const char*ky{p};
 				while(*p++!=':');//? unsafe
 				span keysp(ky,p-ky);
@@ -145,17 +160,6 @@ private:
 		inline span get_span()const{return span(b,e-b-1);}
 
 	}buf;
-
-	class{
-		char b[4]{'\r','\n','\r','\n'};
-		int i;
-	public:
-		inline void rst(){i=0;}
-		inline bool put(const char c){
-			if(b[i]==c)i++;else i=0;
-			return i==sizeof b;
-		}
-	}matcher;
 
 	const char*header_start_ptr{nullptr};
 	stringbuf sb;
@@ -237,6 +241,8 @@ private:
 					break;
 				}else{
 					span t=header["Transfer-Encoding"];
+					while(isspace(*t.ptr()))//? subspan_trim()
+						t=t.subspan(t.ptr()+1,t.length()-1);
 					if(t.unsafe__starts_with_str("chunked")){
 //					if(!t.is_empty() and !strncmp(t.ptr(),"chunked",sizeof "chunked")){
 						st=reading_content_chunked;
