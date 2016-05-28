@@ -7,15 +7,9 @@ namespace xiix{class strbuf{
 	char*b{bb};
 	const char*e{bb+strbuf_size};
 public:
-	inline void rst(){
-		p=b=bb;
-		*p=0;
-	}
+	inline void rst(){p=b=bb;*p=0;}
 	inline size_t len()const{return p-b;}
-	inline void append(const char&ch){
-		assert( p!=e );
-		*p++=ch;
-	}
+	inline void append(const char&ch){assert(p!=e);*p++=ch;}
 	inline void copy_to(char*buf,size_t sizeof_buf){
 		const size_t len=p-b;
 		const size_t ln=len>sizeof_buf?sizeof_buf:ln;
@@ -44,10 +38,5 @@ public:
 			p++;
 		}
 	}
-	inline void backspace(const char replacement_char){
-		assert(p!=b);
-//		if(p==b)throw"underflow";
-		p--;
-		*p=replacement_char;
-	}
+	inline void backspace(const char replacement_char){assert(p!=b);p--;*p=replacement_char;}
 };}

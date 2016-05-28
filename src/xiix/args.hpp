@@ -1,8 +1,8 @@
 #pragma once
 #include<ctype.h>
 namespace xiix{class args final{
-	const int argc;
-	const char**argv;
+	const int argc{0};
+	const char**argv{nullptr};
 public:
 	#define loop()while(true)
 	inline args(const int argc,const char*argv[]):argc{argc},argv{argv}{}

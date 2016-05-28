@@ -3,42 +3,44 @@
 #include<unistd.h>
 namespace xiix{class span{
 protected:
-	const char*pt{nullptr};
-	size_t ln{0};
+	const char*bgn{nullptr};
+	const char*end{nullptr};
+//	size_t ln{0};
 public:
-	inline span(const char*buf,const size_t size):pt{buf},ln{size}{}
-	inline span(const span&s):pt{s.pt},ln{s.ln}{}
-	inline span&operator=(const span&s){pt=s.pt;ln=s.ln;return*this;}
-	inline const char*ptr()const{return pt;}
-	inline size_t len()const{return ln;}
-	inline bool isempty()const{return ln==0;}
-	inline span sub(const char*start,const size_t size)const{
-		assert(start>=pt and (start+size)<=(pt+ln));
-		span s=span(start,size);
-		return s;
-	}
+	inline span(){}
+	inline span(const char*buf,const size_t sizeofbuf):bgn{buf},end{buf+sizeofbuf}{}
+	inline span(const span&s):bgn{s.bgn},end{s.end}{}
+	inline span(const char*begin,const char*end):bgn{begin},end{end}{assert(end>=begin);}
+	inline span&operator=(const span&s){bgn=s.bgn;end=s.end;return*this;}
+	inline const char*ptr()const{return bgn;}
+	inline size_t len()const{return end-bgn;}
+	inline bool isempty()const{return bgn==end;}
+//	inline span sub(const char*start,const size_t size)const{
+//		assert(start>=pt and (start+size)<=(pt+ln));
+//		span s=span(start,size);
+//		return s;
+//	}
 	inline span trimleft()const{
-		const char*p{pt};
-		const char*pe{pt+ln};
+		const char*p{bgn};
 		while(true){
-			if(p==pe)break;
+			if(p==end)break;
 			if(!isspace(*p))break;
 			p++;
 		}
-		return span(p,pe-p);
+		return span(p,end);
 	}
 	inline span&write_to(int fd){
-		const ssize_t nn=write(fd,pt,ln);
+		const size_t ln=len();
+		const ssize_t nn=write(fd,bgn,ln);
 		if(nn<0)throw"write";
 		if((unsigned)nn!=ln)throw"writeincomplete";
 		return*this;
 	}
 	inline bool startswithstr(const char*s){
-		const char*p{pt};
-		const char*pe{pt+ln};
+		const char*p{bgn};
 		while(true){
 			if(!*s)return true;
-			if(p==pe)return false;
+			if(p==end)return false;
 			if(*s!=*p)return false;
 			s++;
 			p++;
