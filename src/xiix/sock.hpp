@@ -80,8 +80,8 @@ private:
 	public:
 		inline void set_span(const span&s){sp=s;}
 		inline bool assert_protocol(){return false;}
-		inline span get_result_code()const{return span{nullptr,nullptr};}
-		inline span get_result_text()const{return span{nullptr,nullptr};}
+		inline span get_result_code()const{return span{};}
+		inline span get_result_text()const{return span{};}
 	}request;
 
 	class{
@@ -105,14 +105,14 @@ private:
 			const char*p=sp.ptr();
 			while(true){
 				const size_t pos=p-sp.ptr();
-				if(pos>=sp.len())return span{nullptr,nullptr};
+				if(pos>=sp.len())return span{};
 				const char*start_of_key{p};
 				while(*p++!=':');//? unsafe
-				span keysp(start_of_key,p-start_of_key);
+				span keysp(start_of_key,p);
 				const char*start_of_value{p};
 				while(*p++!='\n');//? unsafe
 				if(keysp.startswithstr(key))
-					return span(start_of_value,p-start_of_value);
+					return span(start_of_value,p);
 			}
 		}
 	}header;
@@ -143,7 +143,7 @@ private:
 		inline const char*pos()const{return e;}
 		inline char unsafe_next_char(){return *e++;}
 		inline void unsafe_pos_inc(const size_t nbytes){e+=nbytes;}
-		inline span to_span()const{return span(b,e-b-1);}
+		inline span to_span()const{return span(b,e-1);}
 	}buf;
 
 	const char*header_start_ptr{nullptr};
@@ -208,7 +208,7 @@ private:
 				const char ch=buf.unsafe_next_char();
 				if(!end_of_header_matcher.read(ch))
 					continue;
-				const span spn(header_start_ptr,buf.pos()-header_start_ptr-1);
+				const span spn(header_start_ptr,buf.pos()-1);
 				header.set_span(spn);
 				span s=header["Content-Length"];
 				if(!s.isempty()){

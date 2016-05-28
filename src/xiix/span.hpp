@@ -7,7 +7,7 @@ protected:
 	const char*end{nullptr};
 public:
 	inline span(){}
-	inline span(const char*buf,const size_t sizeofbuf):bgn{buf},end{buf+sizeofbuf}{}
+//	inline span(const char*buf,const size_t sizeofbuf):bgn{buf},end{buf+sizeofbuf}{}
 	inline span(const span&s):bgn{s.bgn},end{s.end}{}
 	inline span(const char*begin,const char*end):bgn{begin},end{end}{assert(end>=begin);}
 	inline span&operator=(const span&s){bgn=s.bgn;end=s.end;return*this;}
