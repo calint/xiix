@@ -104,9 +104,6 @@ private:
 			const char*spend=sp.end();
 			while(true){
 				if(p==spend)return span{};
-//				const size_t pos=p-sp.begin();
-//				if(pos>=sp.len())
-//					return span{};
 				const char*start_of_key{p};
 				while(*p++!=':');//? unsafe
 				span keysp(start_of_key,p);
@@ -142,7 +139,7 @@ private:
 		inline const char*pos()const{return e;}
 		inline char unsafe_next_char(){return *e++;}
 		inline void unsafe_pos_inc(const size_t nbytes){e+=nbytes;}
-		inline span to_span()const{return span(b,e-1);}
+		inline span to_span()const{return span(b,e);}
 	}buf;
 
 	const char*header_start_ptr{nullptr};
@@ -175,10 +172,6 @@ private:
 				if(ch=='\n'){
 					const span spn=buf.to_span();
 					request.set_span(spn);
-					header_start_ptr=buf.pos();
-					header.rst();
-					end_of_header_matcher.rst();
-
 					st=reading_headers;
 					header.rst();
 					header_start_ptr=buf.pos();
@@ -193,7 +186,7 @@ private:
 				const char ch=buf.unsafe_next_char();
 				if(!end_of_header_matcher.read(ch))
 					continue;
-				const span spn(header_start_ptr,buf.pos()-2);
+				const span spn(header_start_ptr,buf.pos()-2);//. ignore last \r\n
 				header.set_span(spn);
 				span s=header["Content-Length"];
 				if(!s.isempty()){
@@ -308,7 +301,7 @@ private:
 						st=waiting_to_send_next_request;
 						if(st==waiting_to_send_next_request and !repeat_request_after_done)
 							throw"close";
-					    break;
+						break;
 					}
 				}
 				if(st!=waiting_to_send_next_request and buf.needs_read()){io_request_read();return;}
