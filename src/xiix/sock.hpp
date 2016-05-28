@@ -321,7 +321,7 @@ private:
 		const ssize_t c=send(sockfd,buf,len,MSG_NOSIGNAL);
 		if(c<0){
 			if(errno==EPIPE||errno==ECONNRESET)throw signal_connreset;
-			throw"send";
+			throw"senderr";
 		}
 		meters::output+=c;
 		if(conf::print_traffic)write(1,buf,c);
@@ -333,7 +333,7 @@ private:
 		if(c==0)return 0;// closed by client
 		if(c<0){// error
 			if(errno==EAGAIN||errno==EWOULDBLOCK){
-				io_request_read();
+//				io_request_read();
 			}else if(errno==ECONNRESET){
 				throw signal_connreset;
 			}

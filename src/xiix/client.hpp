@@ -3,9 +3,7 @@
 #include"args.hpp"
 #include"sock.hpp"
 #include"lst.hpp"
-#include<memory>
-
-#include "ns.hpp"
+//#include<memory>
 namespace xiix{class client final{
 public:
 	inline client(const int argc,const char**argv,const char**env){
