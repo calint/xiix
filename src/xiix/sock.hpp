@@ -51,7 +51,7 @@ public:
 //				throw"incompleteparse";
 			buf.rst();
 			const size_t nn=io_recv((void*)buf.pos(),sock_buf_size);
-			if(nn==0)throw"brk";
+			if(nn==0)throw signal_connection_closed_by_server;
 			buf.set_len(nn);
 		}
 		parse_buf();
@@ -105,14 +105,14 @@ private:
 			const char*p=sp.ptr();
 			while(true){
 				const size_t pos=p-sp.ptr();
-				if(pos>=sp.length())
+				if(pos>=sp.len())
 					return span(nullptr,0);
 				const char*ky{p};
 				while(*p++!=':');//? unsafe
 				span keysp(ky,p-ky);
 				const char*value{p};
 				while(*p++!='\n');//? unsafe
-				if(keysp.unsafe__starts_with_str(key))
+				if(keysp.startswithstr(key))
 					return span(value,p-value);
 			}
 		}
@@ -150,7 +150,7 @@ private:
 	const char*header_start_ptr{nullptr};
 	strbuf sb_chunk_size;
 
-	inline void clear_for_next_request(){
+//	inline void clear_for_next_request(){
 //		content_range.rst();
 //		chunk_range.rst();
 //		sb_chunk_size.rst();
@@ -163,7 +163,7 @@ private:
 //		header.rst();
 //		header_start_ptr={nullptr};
 //		end_of_header_matcher.rst();
-	}
+//	}
 	inline void parse_buf(){loop(){
 		if(st==waiting_to_send_next_request){
 			if(is_first_request){
@@ -174,7 +174,7 @@ private:
 					return;
 				}
 			}
-			clear_for_next_request();
+//			clear_for_next_request();
 			meters::requests++;
 			char s[1024];
 			const size_t n=(port!=80)?
@@ -212,7 +212,7 @@ private:
 				const span spn(header_start_ptr,buf.pos()-header_start_ptr-1);
 				header.set_span(spn);
 				span s=header["Content-Length"];
-				if(!s.is_empty()){
+				if(!s.isempty()){
 					content_range.init_for_recieve(atoi(s.ptr()));
 					const size_t brem=buf.rem();
 					const size_t len=content_range.length()<=brem?content_range.length():brem;
@@ -230,20 +230,20 @@ private:
 					if(st==waiting_to_send_next_request and !repeat_request_after_done)
 						throw"close";
 
-					s=header["Connection"].subspan_trim_left();
-					if(s.unsafe__starts_with_str("close"))
+					s=header["Connection"].trimleft();
+					if(s.startswithstr("close"))
 						throw"close";
 					break;
 				}
-				s=header["Transfer-Encoding"].subspan_trim_left();
-				if(s.unsafe__starts_with_str("chunked")){
+				s=header["Transfer-Encoding"].trimleft();
+				if(s.startswithstr("chunked")){
 					st=reading_content_chunked;
 					stc=state_chunked::size;
 					sb_chunk_size.rst();
 					break;
 				}
-				s=header["Connection"].subspan_trim_left();
-				if(s.unsafe__starts_with_str("close")){
+				s=header["Connection"].trimleft();
+				if(s.startswithstr("close")){
 					const size_t brem=buf.rem();
 					on_content(buf.pos(),brem,0);//? 0
 					buf.unsafe_pos_inc(brem);
@@ -340,19 +340,16 @@ private:
 	}}
 	inline void on_content(/*scan*/const char*buf,size_t buflen,size_t contentlen){
 //		printf("*** %zu  %zu   %s\n",buflen,totallen,buf);
-		if(conf::print_content)
-			write(1,buf,buflen);
+		if(conf::print_content)write(1,buf,buflen);
 	}
 	inline size_t io_send(const void*buf,size_t len,bool throw_if_send_not_complete=false){
 		const ssize_t c=send(sockfd,buf,len,MSG_NOSIGNAL);
 		if(c<0){
-			if(errno==EPIPE||errno==ECONNRESET)throw"brk";
+			if(errno==EPIPE||errno==ECONNRESET)throw signal_connection_closed_by_server;
 			throw"send";
 		}
 		meters::output+=c;
-		if(conf::print_traffic){
-			write(1,buf,c);
-		}
+		if(conf::print_traffic)write(1,buf,c);
 		if(throw_if_send_not_complete&&(size_t)c!=len)throw"incompletesend";
 		return(size_t)c;
 	}
@@ -363,7 +360,7 @@ private:
 			if(errno==EAGAIN||errno==EWOULDBLOCK){
 				io_request_read();
 			}else if(errno==ECONNRESET){
-				throw"closed2";
+				throw signal_connection_closed_by_server;
 			}
 			throw"recverr";
 		}

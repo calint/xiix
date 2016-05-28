@@ -4,22 +4,22 @@
 namespace xiix{class span{
 protected:
 	const char*pt{nullptr};
-	size_t len{0};
+	size_t ln{0};
 public:
-	inline span(const char*buf,const size_t size):pt{buf},len{size}{}
-	inline span(const span&s):pt{s.pt},len{s.len}{}
-	inline span&operator=(const span&s){pt=s.pt;len=s.len;return*this;}
+	inline span(const char*buf,const size_t size):pt{buf},ln{size}{}
+	inline span(const span&s):pt{s.pt},ln{s.ln}{}
+	inline span&operator=(const span&s){pt=s.pt;ln=s.ln;return*this;}
 	inline const char*ptr()const{return pt;}
-	inline size_t length()const{return len;}
-	inline bool is_empty()const{return len==0;}
-	inline span subspan(const char*start,const size_t size)const{
-		assert(start>=pt  and  (start+size)<=(pt+len));
+	inline size_t len()const{return ln;}
+	inline bool isempty()const{return ln==0;}
+	inline span sub(const char*start,const size_t size)const{
+		assert(start>=pt and (start+size)<=(pt+ln));
 		span s=span(start,size);
 		return s;
 	}
-	inline span subspan_trim_left()const{
+	inline span trimleft()const{
 		const char*p{pt};
-		const char*pe{pt+len};
+		const char*pe{pt+ln};
 		while(true){
 			if(p==pe)break;
 			if(!isspace(*p))break;
@@ -28,14 +28,14 @@ public:
 		return span(p,pe-p);
 	}
 	inline span&write_to(int fd){
-		const ssize_t nn=write(fd,pt,len);
+		const ssize_t nn=write(fd,pt,ln);
 		if(nn<0)throw"write";
-		if((unsigned)nn!=len)throw"writeincomplete";
+		if((unsigned)nn!=ln)throw"writeincomplete";
 		return*this;
 	}
-	inline bool unsafe__starts_with_str(const char*s){
+	inline bool startswithstr(const char*s){
 		const char*p{pt};
-		const char*pe{pt+len};
+		const char*pe{pt+ln};
 		while(true){
 			if(!*s)return true;
 			if(p==pe)return false;

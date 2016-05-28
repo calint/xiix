@@ -64,7 +64,8 @@ private:
 				try{
 					sk->on_epoll_event(ev);
 				}catch(const char*msg){
-					if(!strcmp("close",msg)||!strcmp("responsecode",msg)||!strcmp("brk",msg)){
+					if(msg==signal_close||!strcmp("responsecode",msg)||msg==signal_connection_closed_by_server){
+//					if(!strcmp("close",msg)||!strcmp("responsecode",msg)||!strcmp("brk",msg)){
 						delete sk;
 						if(meters::socks==0){
 							free(evs);

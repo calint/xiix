@@ -28,4 +28,7 @@ namespace xiix{
 		bool print_stats{false};
 		bool print_content{true};
 	}
+
+	const char*signal_connection_closed_by_server="brk";
+	const char*signal_close="close";
 }

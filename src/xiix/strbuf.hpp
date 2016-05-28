@@ -16,13 +16,13 @@ public:
 		assert( p!=e );
 		*p++=ch;
 	}
-	inline void copy_to(char*buf,size_t buflen){
+	inline void copy_to(char*buf,size_t sizeof_buf){
 		const size_t len=p-b;
-		strncpy(buf,b,len);
+		const size_t ln=len>sizeof_buf?sizeof_buf:ln;
+		strncpy(buf,b,ln);
 	}
 	inline void trimright(){
-		while(1){
-			if(p==b)return;
+		while(p!=b){
 			const char ch=*(p-1);
 			if(!isspace(ch))break;
 			*--p='\0';
@@ -45,7 +45,8 @@ public:
 		}
 	}
 	inline void backspace(const char replacement_char){
-		if(p==b)throw"underflow";
+		assert(p!=b);
+//		if(p==b)throw"underflow";
 		p--;
 		*p=replacement_char;
 	}

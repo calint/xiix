@@ -12,7 +12,7 @@ public:
 		return*this;
 	}
 	inline spanb&p(const span&s){
-		const size_t sn=s.length();
+		const size_t sn=s.len();
 		assert((be-pt+sn)<len);
 		memcpy(bb,s.ptr(),sn);
 		be+=sn;
@@ -36,7 +36,7 @@ public:
 		return be-bb;
 	}
 	inline const span string_span()const{
-		const span o=subspan((const char*)bb,string_size());
+		const span o=sub((const char*)bb,string_size());
 		return o;
 	}
 };}
