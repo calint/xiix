@@ -98,7 +98,7 @@ private:
 				span keysp(ky,p-ky);
 				const char*value{p};
 				while(*p++!='\n');//? unsafe
-				if(keysp.string_equals(key)){
+				if(keysp.unsafe__starts_with_str(key)){
 					return span(value,p-value);
 				}
 			}
@@ -146,6 +146,17 @@ private:
 
 	}buf;
 
+	class{
+		char b[4]{'\r','\n','\r','\n'};
+		int i;
+	public:
+		inline void rst(){i=0;}
+		inline bool put(const char c){
+			if(b[i]==c)i++;else i=0;
+			return i==sizeof b;
+		}
+	}matcher;
+
 	const char*header_start_ptr{nullptr};
 	stringbuf sb;
 
@@ -157,6 +168,7 @@ private:
 		buf.clr();
 		stc=state_chunked::size;
 		header_start_ptr={nullptr};
+		matcher.rst();
 	}
 	inline void parse_buf(){char prevch{0};loop(){
 		if(st==waiting_to_send_next_request){
@@ -187,6 +199,7 @@ private:
 					request.set_span(spn);
 					header_start_ptr=buf.pos();
 					header.clr();
+					matcher.rst();
 					st=reading_headers;
 					break;
 				}
@@ -196,21 +209,23 @@ private:
 		if(st==reading_headers){
 			while(!buf.needs_read()){
 				const char ch=buf.unsafe_next_char();
-				if(ch!='\n'){prevch=ch;continue;}
-				if(prevch!='\n'){prevch=ch;continue;}
+				if(!matcher.put(ch))
+					continue;
 				const span spn(header_start_ptr,buf.pos()-header_start_ptr-1);
 				header.set_span(spn);
 
-				span s=header["content-length"];
+				span s=header["Content-Length"];
 				if(s.length()>0){
 					content.init_for_recieve(atoi(s.ptr()));
 					const size_t rem=buf.rem();
 					const size_t read_size=content.length()<=rem?content.length():rem;
-					if(conf::print_content)
-						write(1,buf.pos(),read_size);
-					on_content(buf.pos(),read_size,content.length());
-					buf.unsafe_pos_inc(read_size);
-					content.unsafe_pos_inc(read_size);
+					if(read_size>0){
+						if(conf::print_content)
+							write(1,buf.pos(),read_size);
+						on_content(buf.pos(),read_size,content.length());
+						buf.unsafe_pos_inc(read_size);
+						content.unsafe_pos_inc(read_size);
+					}
 					if(content.needs_read()){
 						st=reading_content_sized;
 						io_request_read();
@@ -221,14 +236,16 @@ private:
 						throw"close";//? return or throw
 					continue;
 				}else{
-					span t=header["transfer-encoding"];
-					if(!t.is_empty() and !strcmp(t.ptr(),"chunked")){
+					span t=header["Transfer-Encoding"];
+					if(t.unsafe__starts_with_str("chunked")){
+//					if(!t.is_empty() and !strncmp(t.ptr(),"chunked",sizeof "chunked")){
 						st=reading_content_chunked;
 						stc=state_chunked::size;
 						sb.rst();
+						break;
 
 					}else{
-						span s=header["connection"];
+						span s=header["Connection"];
 						if(!s.is_empty() and !strcmp("close",s.ptr())){
 							const size_t rem=buf.rem();
 							if(conf::print_content)
@@ -240,17 +257,18 @@ private:
 							throw"unknowntransfertype";
 					}
 				}
-				st=reading_content_sized;
 			}
 			if(buf.needs_read()){io_request_read();return;}
 		}
 		if(st==reading_content_sized){
 			const size_t rem=content.rem();
-			const size_t read_size=rem>bufsize?bufsize:rem;
+			const size_t read_in_buffer=buf.rem();
+			const size_t read_size=rem>read_in_buffer?read_in_buffer:rem;
 			if(conf::print_content)
 				write(1,buf.pos(),read_size);
 			on_content(buf.pos(),read_size,content.length());
 			content.unsafe_pos_inc(read_size);
+			buf.unsafe_pos_inc(read_size);
 			if(!content.needs_read()){
 				st=waiting_to_send_next_request;
 				if(st==waiting_to_send_next_request and !repeat_request_after_done)

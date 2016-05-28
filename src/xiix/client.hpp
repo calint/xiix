@@ -32,7 +32,7 @@ private:
 		if(ag.hasoption('q'))conf::print_content=false;
 		const bool repeatmode=ag.hasoption('r');
 		if(ag.hasoption('v')){
-			printf("\n  x i i x   m a r k\n");
+			printf("\n  x i i x   m a r k\n\n");
 			if(port!=80)printf("           url: http://%s:%d%s\n",hostname,port,uri);
 			else        printf("           url: http://%s%s\n",hostname,uri);
 			printf("       clients: %d\n",nsocks);
