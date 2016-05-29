@@ -11,7 +11,6 @@
 #include<cassert>
 #include<stdlib.h>
 #include<stdio.h>
-
 namespace xiix{class sock final{
 public:
 	inline sock(const int epollfd,const char*hostname,const int port):epollfd{epollfd},hostname{hostname},port{port}{meters::socks++;}

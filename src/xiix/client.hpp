@@ -2,8 +2,10 @@
 #include"ns.hpp"
 #include"args.hpp"
 #include"sock.hpp"
-#include"lst.hpp"
+//#include"lst.hpp"
 //#include<memory>
+#include<vector>
+#include<algorithm>
 namespace xiix{class client final{
 public:
 	inline client(const int argc,const char**argv,const char**env){
@@ -45,16 +47,28 @@ private:
 		if(epollfd<0)throw"epoll_create";
 
 		using namespace std;
-//		lst<unique_ptr<sock>>socks;
-		lst<sock*>socks;
+		vector<sock*>socks;
+		for(int i=0;i<nsocks;i++)socks.push_back(new sock(epollfd,hostname,port));
+		for_each(socks.begin(),socks.end(),[repeatmode,uri](sock*s){s->seturi(uri).setrepeatmode(repeatmode).connect();});
+
+
+//		lst<sock*>socks;
+//		for(int i=0;i<nsocks;i++)socks.add(new sock(epollfd,hostname,port));
+//		socks.foreach2([repeatmode,uri](sock*s){s->seturi(uri).setrepeatmode(repeatmode).connect();return true;});
+//		socks.foreach2([repeatmode,uri](auto s){s->seturi(uri).setrepeatmode(repeatmode).connect();return true;});
+
+//		using namespace std;
+//		vector<unique_ptr<sock>>socks;
 //		for(auto&s:socks)s=new sock(epollfd,hostname,port);
 //		for(int i=0;i<nsocks;i++)socks.add(unique_ptr<sock>(new sock(epollfd,hostname,port)));
-		for(int i=0;i<nsocks;i++)socks.add(new sock(epollfd,hostname,port));
+//		for(int i=0;i<nsocks;i++)socks.push_back(make_unique<sock>(epollfd,hostname,port));
 //		socks.foreach2([repeatmode,uri](unique_ptr<sock>s){s->seturi(uri).setrepeatmode(repeatmode).connect();return true;});
-		socks.foreach2([repeatmode,uri](sock*s){s->seturi(uri).setrepeatmode(repeatmode).connect();return true;});
+//		for_each(socks.begin(),socks.end(),[repeatmode,uri](unique_ptr<sock>s){s->seturi(uri).setrepeatmode(repeatmode).connect();});
+
 		struct epoll_event*evs=(epoll_event*)calloc(nsocks,sizeof(struct epoll_event));
+
 		while(1){
-			const int n=epoll_wait(epollfd,evs,nsocks,-1);
+			const int n=epoll_wait(epollfd,evs,nsocks,500);
 			for(int i=0;i<n;++i){
 				meters::events++;
 				struct epoll_event&ev=evs[i];
@@ -62,7 +76,7 @@ private:
 				try{
 					sk->on_epoll_event(ev);
 				}catch(const char*msg){
-					if(msg==signal_close||!strcmp("responsecode",msg)||msg==signal_connreset){
+					if(msg==signal_close||msg==signal_connreset){
 //					if(!strcmp("close",msg)||!strcmp("responsecode",msg)||!strcmp("brk",msg)){
 						delete sk;
 						if(meters::socks==0){
