@@ -2,8 +2,7 @@
 #include"ns.hpp"
 #include"args.hpp"
 #include"sock.hpp"
-//#include"lst.hpp"
-//#include<memory>
+#include<memory>
 #include<vector>
 #include<algorithm>
 namespace xiix{class client final{
@@ -12,9 +11,10 @@ public:
 		try{
 			main(argc,argv);
 		}catch(const char*msg){
+			puts(" *** exception caught");
 			puts(msg);
 		}catch(...){
-			puts("exception caught");
+			puts(" *** exception caught");
 		}
 	}
 private:
@@ -47,9 +47,10 @@ private:
 		if(epollfd<0)throw"epoll_create";
 
 		using namespace std;
-		vector<sock*>socks;
-		for(int i=0;i<nsocks;i++)socks.push_back(new sock(epollfd,hostname,port));
-		for_each(socks.begin(),socks.end(),[repeatmode,uri](sock*s){s->seturi(uri).setrepeatmode(repeatmode).connect();});
+		using sock_sp=shared_ptr<sock>;
+		vector<sock_sp>socks;
+		for(int i=0;i<nsocks;i++)socks.push_back(make_shared<sock>(epollfd,hostname,port));
+		for_each(socks.begin(),socks.end(),[repeatmode,uri](sock_sp s){s->seturi(uri).setrepeatmode(repeatmode).connect();});
 
 
 //		lst<sock*>socks;
@@ -66,7 +67,6 @@ private:
 //		for_each(socks.begin(),socks.end(),[repeatmode,uri](unique_ptr<sock>s){s->seturi(uri).setrepeatmode(repeatmode).connect();});
 
 		struct epoll_event*evs=(epoll_event*)calloc(nsocks,sizeof(struct epoll_event));
-
 		while(1){
 			const int n=epoll_wait(epollfd,evs,nsocks,500);
 			for(int i=0;i<n;++i){
@@ -77,18 +77,21 @@ private:
 					sk->on_epoll_event(ev);
 				}catch(const char*msg){
 					if(msg==signal_close||msg==signal_connreset){
-//					if(!strcmp("close",msg)||!strcmp("responsecode",msg)||!strcmp("brk",msg)){
-						delete sk;
+//						delete sk;
+						sk->disconnect();//? need
+						meters::socks--;
 						if(meters::socks==0){
 							free(evs);
 							return 0;
 						}
 					}else{
-						puts("*** exception caught");
+						puts("*** unknown signal from sock caught  exiting");
 						puts(msg);
+						free(evs);
+						return-1;
 					}
 				}catch(...){
-					puts("*** exception caught");
+					puts("*** unknown signal caught  exiting");
 					free(evs);
 					return-1;
 				}

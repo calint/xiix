@@ -1,6 +1,5 @@
 #pragma once
 #include"ns.hpp"
-#include"span.hpp"
 #include"strbuf.hpp"
 #include<string.h>
 #include<netdb.h>
@@ -11,6 +10,8 @@
 #include<cassert>
 #include<stdlib.h>
 #include<stdio.h>
+
+#include "span.hpp"
 namespace xiix{class sock final{
 public:
 	inline sock(const int epollfd,const char*hostname,const int port):epollfd{epollfd},hostname{hostname},port{port}{meters::socks++;}

@@ -1,6 +1,6 @@
 #pragma once
-#include"ns.hpp"
 #include<string.h>
+#include<cassert>
 namespace xiix{class strbuf{
 	char bb[strbuf_size];
 	char*b{bb};
